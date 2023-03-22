@@ -10,8 +10,8 @@ from tqdm import tqdm
 GAMMA_BAR = 8 #10
 BETA_BAR = 1.5 #300
 A = 2.5
-D = GAMMA_BAR * BETA_BAR
-CAPACITY = 115.13 / 30
+D = 115.13 #GAMMA_BAR * BETA_BAR
+CAPACITY = 140
 TIME = 22
 ## One set of working parameters: GAMMA_BAR = 1, BETA_BAR = 1, A = 3, D = 10, MU = 50, rho = 0.8, tau = 0.1
 
@@ -141,14 +141,14 @@ def get_congestion(x1, x2, x3, rho):
     return x3 * c_o(x3, 1 - rho) + (x1 + x2) * c_h(x1, x2, rho)
 
 def get_revenue(x1, tau):
-    return x1 * tau
+    return x1 * tau * D
 
 rho_lst = [1/4, 2/4, 3/4] #[0.1, 0.3, 0.5, 0.7, 0.8]
 tau_lst = np.arange(0, 10, 0.5)[1:] #np.linspace(0, TAU_BAR, num = 6)[1:]
 arg_lst = list(itertools.product(rho_lst, tau_lst))
 dct = {"rho": [], "tau": [], "x1": [], "x2": [], "x3": [], "loss": [], "regime": [], "congestion": [], "revenue": []}
 for (rho, tau) in tqdm(arg_lst):
-    (x1, x2, x3), regime_type, loss_arr = solve_regime(rho, tau, max_itr = 10000, eta = 1e-2, eps = 1e-7, decay_sched = 2000, eta_min = 1e-8)
+    (x1, x2, x3), regime_type, loss_arr = solve_regime(rho, tau, max_itr = 10000, eta = 1e-1, eps = 1e-7, decay_sched = 2000, eta_min = 1e-8)
     congestion = get_congestion(x1, x2, x3, rho)
     revenue = get_revenue(x1, tau)
     dct["rho"].append(rho)
