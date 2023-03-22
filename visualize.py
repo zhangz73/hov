@@ -36,7 +36,7 @@ plt.close()
 
 for rho in [0.25, 0.5, 0.75]:
     df_sub = df[(df["rho"] == rho) & (df["pareto_sep"] == 1)]
-    plt.scatter(df_sub["congestion"], df_sub["revenue"], label = f"rho = {rho}")
+    plt.scatter(df_sub["congestion"], df_sub["revenue"], label = f"$\\rho = {rho}$")
 plt.xlabel("Congestion")
 plt.ylabel("Revenue")
 plt.title("Pareto Front")
