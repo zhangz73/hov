@@ -25,6 +25,8 @@ for i in range(df.shape[0]):
 df["pareto"] = pareto
 df["pareto_sep"] = pareto_sep
 
+df.to_csv("results_pareto.csv", index=False)
+
 df_pareto = df[df["pareto"] == 1]
 plt.scatter(df_pareto["congestion"], df_pareto["revenue"])
 plt.plot(df_pareto["congestion"], df_pareto["revenue"])
