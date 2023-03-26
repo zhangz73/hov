@@ -28,22 +28,23 @@ df["pareto_sep"] = pareto_sep
 df.to_csv("results_pareto.csv", index=False)
 
 df_pareto = df[df["pareto"] == 1]
-plt.scatter(df_pareto["congestion"], df_pareto["revenue"])
-plt.plot(df_pareto["congestion"], df_pareto["revenue"])
-plt.xlabel("Average Traffic Time Per Person (Minutes)")
-plt.ylabel("Total Revenue ($)")
-plt.title("Pareto Front")
-plt.savefig("pareto.png")
-plt.clf()
-plt.close()
+#plt.scatter(df_pareto["congestion"], df_pareto["revenue"])
+#plt.plot(df_pareto["congestion"], df_pareto["revenue"])
+#plt.xlabel("Average Traffic Time Per Person (Minutes)")
+#plt.ylabel("Total Revenue ($)")
+#plt.title("Pareto Front")
+#plt.savefig("pareto.png")
+#plt.clf()
+#plt.close()
 
 for rho in [0.25, 0.5, 0.75]:
     df_sub = df[(df["rho"] == rho) & (df["pareto_sep"] == 1)]
     plt.scatter(df_sub["congestion"], df_sub["revenue"], label = f"$\\rho = {rho}$")
     plt.plot(df_sub["congestion"], df_sub["revenue"])
+plt.plot(df_pareto["congestion"], df_pareto["revenue"], color = "black", alpha = 0.5, label = "Combined", linestyle = "--")
 plt.xlabel("Average Traffic Time Per Person (Minutes)")
-plt.ylabel("Total Revenue ($)")
-plt.title("Pareto Front")
+plt.ylabel("Total Revenue Per Minute ($/min)")
+#plt.title("Pareto Front")
 plt.legend()
 plt.savefig("pareto_sep.png")
 plt.clf()
