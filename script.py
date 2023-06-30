@@ -6,6 +6,7 @@ from scipy import optimize
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+#test 
 #TAU_BAR = 15
 UGAMMA = 8 #10
 UBETA = 1.5 #300
