@@ -68,6 +68,18 @@ def f_int(lbeta, ubeta, gamma_pos):
     ans = torch.sum(F_BETA_GAMMA_LST[lbeta_pos:(ubeta_pos+1),gamma_pos] * beta_gap)
     return ans
 
+def f_int_beta(lgamma, ugamma, beta_pos):
+    global F_BETA_GAMMA_LST
+    if F_BETA_GAMMA_LST is None:
+        populate_f_beta_gamma_lst()
+    gamma_gap = (UGAMMA - LGAMMA) / INT_GRAN
+    lgamma_pos = int(round(((float(lgamma) - LGAMMA) / (UGAMMA - LGAMMA)) * INT_GRAN))
+    ugamma_pos = int(round(((float(ugamma) - LGAMMA) / (UGAMMA - LGAMMA)) * INT_GRAN))
+    lgamma_pos = min(lgamma_pos, INT_GRAN - 1)
+    ugamma_pos = min(ugamma_pos, INT_GRAN - 1)
+    ans = torch.sum(F_BETA_GAMMA_LST[beta_pos, lgamma_pos:(ugamma_pos+1)] * gamma_gap)
+    return ans
+
 def regime_fixedpoint_loss(x, rho, tau):
     # x: toll, pool, ordinary
     c_delta = c_o(1 - x[0] - x[1], 1 - rho) - c_h(x[0], x[1], rho)
@@ -83,7 +95,23 @@ def regime_fixedpoint_loss(x, rho, tau):
     return (x[0] - sigma_toll_rhs) ** 2 + (x[1] - sigma_pool_rhs) ** 2
 
 def solve_regime(rho, tau, max_itr = 1000, eta = 0.1, eps = 1e-7, decay_sched = 500, eta_min = 1e-4):
-    x_init = [0.1, 0.1]
+    pool_cutoff = 0
+    beta_gap = (UBETA - LBETA) / INT_GRAN
+    for beta_pos in range(INT_GRAN):
+        beta = beta_pos * beta_gap + LBETA
+        pool_cutoff += beta_gap * f_int_beta(0, tau * beta / UBETA, beta_pos)
+    pool_cutoff = float(pool_cutoff)
+    c_delta_cutoff = c_o(1 - pool_cutoff, 1 - rho) - c_h(0, pool_cutoff, rho)
+    if tau < min(UGAMMA, UBETA * c_delta_cutoff):
+        x_init = [pool_cutoff / 2, pool_cutoff / 2]
+        regime_type = "B"
+    else:
+        if tau > UBETA * c_delta_cutoff:
+            regime_type = "A1"
+            x_init = [0, pool_cutoff / 2]
+        else:
+            regime_type = "A2"
+            x_init = [0, (1 - pool_cutoff) / 2]
     x = torch.tensor(x_init, requires_grad = True)
     itr = 0
     loss = 1
@@ -116,7 +144,7 @@ def solve_regime(rho, tau, max_itr = 1000, eta = 0.1, eps = 1e-7, decay_sched = 
     x = x.detach().numpy()
     x1, x2 = x[0], x[1]
     x3 = 1 - x1 - x2
-    return (x1, x2, x3), loss_arr
+    return (x1, x2, x3), regime_type, loss_arr
 
 def get_congestion(x1, x2, x3, rho):
     return x3 * c_o(x3, 1 - rho) + (x1 + x2) * c_h(x1, x2, rho)
@@ -127,9 +155,9 @@ def get_revenue(x1, tau):
 rho_lst = [1/4, 2/4, 3/4] #[0.1, 0.3, 0.5, 0.7, 0.8]
 tau_lst = np.arange(0, 10, 0.5)[1:] #np.linspace(0, TAU_BAR, num = 6)[1:]
 arg_lst = list(itertools.product(rho_lst, tau_lst))
-dct = {"rho": [], "tau": [], "x1": [], "x2": [], "x3": [], "loss": [], "congestion": [], "revenue": []}
+dct = {"rho": [], "tau": [], "x1": [], "x2": [], "x3": [], "loss": [], "regime": [], "congestion": [], "revenue": []}
 for (rho, tau) in tqdm(arg_lst):
-    (x1, x2, x3), loss_arr = solve_regime(rho, tau, max_itr = 2000, eta = 1e-2, eps = 1e-6, decay_sched = 2000, eta_min = 1e-8)
+    (x1, x2, x3), regime_type, loss_arr = solve_regime(rho, tau, max_itr = 2000, eta = 1e-2, eps = 1e-6, decay_sched = 2000, eta_min = 1e-8)
     congestion = get_congestion(x1, x2, x3, rho)
     revenue = get_revenue(x1, tau)
     dct["rho"].append(rho)
@@ -138,7 +166,7 @@ for (rho, tau) in tqdm(arg_lst):
     dct["x2"].append(x2)
     dct["x3"].append(x3)
     dct["loss"].append(loss_arr[-1])
-#    dct["regime"].append(regime_type)
+    dct["regime"].append(regime_type)
     dct["congestion"].append(congestion)
     dct["revenue"].append(revenue)
 df = pd.DataFrame.from_dict(dct)
@@ -147,7 +175,7 @@ df.to_csv("results.csv", index = False)
 #loss = regime_fixedpoint_loss(torch.tensor([0.174, 0.075, 0.751]), 0.25, 1) #[0.287, 0.03, 0.683]
 #print(loss)
 
-#(x1, x2, x3), loss_arr = solve_regime(0.25, 1, max_itr = 1000, eta = 1e-3, eps = 1e-5, decay_sched = 2000, eta_min = 1e-7)
+#(x1, x2, x3), regime_type, loss_arr = solve_regime(0.25, 1, max_itr = 1000, eta = 1e-3, eps = 1e-5, decay_sched = 2000, eta_min = 1e-7)
 #print(x1, x2, x3)
 ##print(loss_arr)
 #plt.plot(loss_arr)
