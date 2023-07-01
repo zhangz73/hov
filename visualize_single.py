@@ -10,6 +10,7 @@ for rho in [0.25, 0.5, 0.75]:
 plt.xlabel("Toll Price")
 plt.ylabel("Travel Time")
 plt.legend()
+plt.savefig("vis.png")
 plt.show()
 
 #rho = 0.25

@@ -36,8 +36,8 @@ def c_h(x1, x2, rho):
 def f(beta, gamma):
 #    return 1 / (UBETA * UGAMMA)
     coef = 1 / (UBETA * UGAMMA)
-    if int(gamma) % 2 == 0:
-        coef *= 2
+    if int(gamma) % 4 == 1:
+        coef *= 4
     else:
         coef = 0
     return coef
@@ -63,25 +63,27 @@ def f_int(lbeta, ubeta, gamma_pos):
     beta_gap = (UBETA - LBETA) / INT_GRAN
     lbeta_pos = int(round(((float(lbeta) - LBETA) / (UBETA - LBETA)) * INT_GRAN))
     ubeta_pos = int(round(((float(ubeta) - LBETA) / (UBETA - LBETA)) * INT_GRAN))
+    lbeta_pos = min(lbeta_pos, INT_GRAN - 1)
+    ubeta_pos = min(ubeta_pos, INT_GRAN - 1)
     ans = torch.sum(F_BETA_GAMMA_LST[lbeta_pos:(ubeta_pos+1),gamma_pos] * beta_gap)
     return ans
 
 def regime_fixedpoint_loss(x, rho, tau):
     # x: toll, pool, ordinary
-    c_delta = c_o(x[2], rho) - c_h(x[0], x[1], rho)
+    c_delta = c_o(1 - x[0] - x[1], 1 - rho) - c_h(x[0], x[1], rho)
     sigma_toll_rhs = 0
     gamma_gap = (UGAMMA - LGAMMA) / INT_GRAN
     gamma_lo_pos = min(int(((tau - LGAMMA) / (UGAMMA - LGAMMA)) * INT_GRAN), INT_GRAN - 1)
     for gamma_pos in range(gamma_lo_pos, INT_GRAN):
         sigma_toll_rhs += gamma_gap * f_int(tau / c_delta, UBETA, gamma_pos)
     sigma_pool_rhs = 0
-    for gamma_pos in range(0, gamma_lo_pos):
+    for gamma_pos in range(0, gamma_lo_pos + 1):
         gamma = gamma_pos * gamma_gap + LGAMMA
         sigma_pool_rhs += gamma_gap * f_int(gamma / c_delta, UBETA, gamma_pos)
     return (x[0] - sigma_toll_rhs) ** 2 + (x[1] - sigma_pool_rhs) ** 2
 
 def solve_regime(rho, tau, max_itr = 1000, eta = 0.1, eps = 1e-7, decay_sched = 500, eta_min = 1e-4):
-    x_init = [1/3, 1/3, 1/3]
+    x_init = [0.1, 0.1]
     x = torch.tensor(x_init, requires_grad = True)
     itr = 0
     loss = 1
@@ -90,6 +92,8 @@ def solve_regime(rho, tau, max_itr = 1000, eta = 0.1, eps = 1e-7, decay_sched = 
     while itr < max_itr and loss > eps and eta >= eta_min:
         loss = regime_fixedpoint_loss(x, rho, tau)
         loss_arr.append(float(loss.data))
+        if loss <= eps:
+            break
         if torch.isnan(loss):
             eta = eta * 0.1
             x = torch.tensor(x_init, requires_grad = True)
@@ -110,8 +114,9 @@ def solve_regime(rho, tau, max_itr = 1000, eta = 0.1, eps = 1e-7, decay_sched = 
     loss = regime_fixedpoint_loss(x, rho, tau)
     loss_arr.append(float(loss.data))
     x = x.detach().numpy()
-    x[2] = 1 - x[0] - x[1]
-    return x, loss_arr
+    x1, x2 = x[0], x[1]
+    x3 = 1 - x1 - x2
+    return (x1, x2, x3), loss_arr
 
 def get_congestion(x1, x2, x3, rho):
     return x3 * c_o(x3, 1 - rho) + (x1 + x2) * c_h(x1, x2, rho)
@@ -124,8 +129,7 @@ tau_lst = np.arange(0, 10, 0.5)[1:] #np.linspace(0, TAU_BAR, num = 6)[1:]
 arg_lst = list(itertools.product(rho_lst, tau_lst))
 dct = {"rho": [], "tau": [], "x1": [], "x2": [], "x3": [], "loss": [], "congestion": [], "revenue": []}
 for (rho, tau) in tqdm(arg_lst):
-    x, loss_arr = solve_regime(rho, tau, max_itr = 1000, eta = 1e-1, eps = 1e-4, decay_sched = 500, eta_min = 1e-8)
-    x1, x2, x3 = x[0], x[1], x[2]
+    (x1, x2, x3), loss_arr = solve_regime(rho, tau, max_itr = 2000, eta = 1e-2, eps = 1e-6, decay_sched = 2000, eta_min = 1e-8)
     congestion = get_congestion(x1, x2, x3, rho)
     revenue = get_revenue(x1, tau)
     dct["rho"].append(rho)
@@ -140,13 +144,16 @@ for (rho, tau) in tqdm(arg_lst):
 df = pd.DataFrame.from_dict(dct)
 df.to_csv("results.csv", index = False)
 
-#x, loss_arr = solve_regime(0.25, 1, max_itr = 1000, eta = 1e-1, eps = 1e-4, decay_sched = 2000, eta_min = 1e-7)
-#print(x)
+#loss = regime_fixedpoint_loss(torch.tensor([0.174, 0.075, 0.751]), 0.25, 1) #[0.287, 0.03, 0.683]
+#print(loss)
+
+#(x1, x2, x3), loss_arr = solve_regime(0.25, 1, max_itr = 1000, eta = 1e-3, eps = 1e-5, decay_sched = 2000, eta_min = 1e-7)
+#print(x1, x2, x3)
 ##print(loss_arr)
 #plt.plot(loss_arr)
 #plt.xlabel("Iterations")
 #plt.ylabel("Loss")
-#plt.title(f"Loss = {loss_arr[-1]:.2e}\nx1 = {x[0]:.2f}, x2 = {x[1]:.2f}, x3 = {x[2]:.2f}")
+#plt.title(f"Loss = {loss_arr[-1]:.2e}\nx1 = {x1:.2f}, x2 = {x2:.2f}, x3 = {x3:.2f}")
 #plt.savefig("loss.png")
 #plt.clf()
 #plt.close()
