@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import torch
 from scipy import optimize
+from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
@@ -18,6 +19,8 @@ CAPACITY = 140
 TIME = 22
 INT_GRAN = 100
 F_BETA_GAMMA_LST = None
+
+var = multivariate_normal(mean = [(UBETA + LBETA) / 2, (UGAMMA + LGAMMA) / 2], cov = [[(UBETA + LBETA) / 2, 0], [0, (UGAMMA + LGAMMA) / 2]])
 
 def cost(flow, rho):
     r = flow / (CAPACITY * rho)
@@ -41,6 +44,7 @@ def f(beta, gamma):
     else:
         coef = 0
     return coef
+#    return var.pdf([beta, gamma])
 
 def populate_f_beta_gamma_lst():
     global F_BETA_GAMMA_LST
