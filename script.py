@@ -157,7 +157,7 @@ def get_revenue(x1, tau):
     return x1 * tau * D
 
 rho_lst = [1/4, 2/4, 3/4] #[0.1, 0.3, 0.5, 0.7, 0.8]
-tau_lst = np.arange(0, 10, 0.5)[1:] #np.linspace(0, TAU_BAR, num = 6)[1:]
+tau_lst = np.arange(0, 10, 0.2)[1:] #np.linspace(0, TAU_BAR, num = 6)[1:]
 arg_lst = list(itertools.product(rho_lst, tau_lst))
 dct = {"rho": [], "tau": [], "x1": [], "x2": [], "x3": [], "loss": [], "regime": [], "congestion": [], "revenue": []}
 for (rho, tau) in tqdm(arg_lst):
