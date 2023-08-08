@@ -16,7 +16,7 @@ LBETA = 0
 A = 2.5
 D = 115.13 #GAMMA_BAR * BETA_BAR
 CAPACITY = 140
-TIME = 22
+TIME = 30#22
 INT_GRAN = 100
 F_BETA_GAMMA_LST = None
 
@@ -25,8 +25,8 @@ var = multivariate_normal(mean = [(UBETA + LBETA) / 2, (UGAMMA + LGAMMA) / 2], c
 def cost(flow, rho):
     r = flow / (CAPACITY * rho)
     a = 0.15
-    b = 4
-    return TIME * (1 + a * (flow / (CAPACITY * rho)) ** b) #r / (CAPACITY * rho - flow)
+    b = 1#4
+    return TIME * (1 + a * (flow / (CAPACITY * rho)) ** b)
 
 def c_o(x3, rho):
     flow = x3 * D
@@ -37,13 +37,13 @@ def c_h(x1, x2, rho):
     return cost(flow, rho)
 
 def f(beta, gamma):
-#    return 1 / (UBETA * UGAMMA)
-    coef = 1 / (UBETA * UGAMMA)
-    if int(gamma) % 4 == 1:
-        coef *= 4
-    else:
-        coef = 0
-    return coef
+    return 1 / (UBETA * UGAMMA)
+#    coef = 1 / (UBETA * UGAMMA)
+#    if int(gamma) % 4 == 1:
+#        coef *= 4#16/7
+#    else:
+#        coef *= 0#4/7
+#    return coef
 #    return var.pdf([beta, gamma])
 
 def populate_f_beta_gamma_lst():
@@ -152,6 +152,7 @@ def solve_regime(rho, tau, max_itr = 1000, eta = 0.1, eps = 1e-7, decay_sched = 
 
 def get_congestion(x1, x2, x3, rho):
     return x3 * c_o(x3, 1 - rho) + (x1 + x2) * c_h(x1, x2, rho)
+#    return  x3 * c_o(x3, 1 - rho) + (x1 + x2 / A) * c_h(x1, x2, rho)
 
 def get_revenue(x1, tau):
     return x1 * tau * D
