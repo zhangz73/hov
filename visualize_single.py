@@ -13,6 +13,20 @@ plt.legend()
 plt.savefig("vis.png")
 plt.show()
 
+## Plot ratio of people going to ordinary lane as tau increases
+#for rho in [0.25, 0.5, 0.75]:
+#    df_vis = df[df["rho"] == rho]
+#    df_vis = df_vis[df_vis["regime"] == "B"]
+#    x3 = np.array(df_vis["x3"])
+#    x1 = np.array(df_vis["x1"])
+#    gamma = -(x3[1:] - x3[:-1]) / (x1[1:] - x1[:-1])
+#    plt.plot(df_vis.iloc[:-1]["tau"], gamma, label = f"rho = {rho}")
+#plt.xlabel("Toll Price")
+#plt.ylabel("Fraction of People Moving to Ordinary Lane")
+#plt.legend()
+#plt.savefig("vis.png")
+#plt.show()
+
 #for rho in [0.25, 0.5, 0.75]:
 #    df_vis = df[df["rho"] == rho]
 #    plt.plot(df_vis["x2"], df_vis["x1"], label = f"rho = {rho}")
@@ -23,14 +37,14 @@ plt.show()
 ##plt.savefig("vis_o.png")
 #plt.show()
 
-for rho in [0.25, 0.5, 0.75]:
-    df_vis = df[df["rho"] == rho]
-    plt.plot(df_vis["tau"], df_vis["x3"], label = f"rho = {rho}")
-plt.xlabel("Toll Price")
-plt.ylabel("% People Using Ordinary Lane")
-plt.legend()
-#plt.savefig("vis_o.png")
-plt.show()
+#for rho in [0.25, 0.5, 0.75]:
+#    df_vis = df[df["rho"] == rho]
+#    plt.plot(df_vis["tau"], df_vis["x3"], label = f"rho = {rho}")
+#plt.xlabel("Toll Price")
+#plt.ylabel("% People Using Ordinary Lane")
+#plt.legend()
+##plt.savefig("vis_o.png")
+#plt.show()
 
 #rho = 0.25
 #df_vis = df[df["rho"] == rho]

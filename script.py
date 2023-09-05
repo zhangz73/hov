@@ -16,7 +16,7 @@ LBETA = 0
 A = 2.5
 D = 115.13 #GAMMA_BAR * BETA_BAR
 CAPACITY = 140
-TIME = 30#22
+TIME = 22 #30 for non-convex shape
 INT_GRAN = 100
 F_BETA_GAMMA_LST = None
 
