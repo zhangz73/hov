@@ -28,8 +28,8 @@ df = df[["Time", "Toll"]].groupby(["Time"]).mean().reset_index().sort_values("Ti
 
 ## Load population data
 df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
-sigma_2over1 = df_pop["TwoPeople"].sum() / df_pop["Single"].sum()
-sigma_3over1 = df_pop["ThreePlus"].sum() / df_pop["Single"].sum()
+sigma_2over1 = df_pop["TwoPeople"].sum() * 2 / df_pop["Single"].sum()
+sigma_3over1 = df_pop["ThreePlus"].sum() * 3 / df_pop["Single"].sum()
 
 ## Load station data
 #df_station = pd.read_csv("d04_text_meta_2021_03_19.txt", sep = "\t")

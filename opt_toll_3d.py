@@ -7,8 +7,8 @@ from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-UGAMMA2 = 28.168
-UGAMMA3 = 2.582
+UGAMMA2 = 19.536
+UGAMMA3 = 2.510
 BETA = 0.525
 POWER = 4
 NUM_LANES = 4
@@ -146,7 +146,7 @@ total_emission_lst = []
 total_revenue_lst = []
 loss_lst = []
 tau_lst = []
-for tau in tqdm(np.arange(0, 60, 0.5)):
+for tau in tqdm(np.arange(0, 40, 0.2)):
     sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large = solve_sigma(tau, rho, max_itr = 2000, eta = 1e-1, eps = 1e-7, min_eta = 1e-10)
     total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3)
     total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3)
@@ -172,6 +172,7 @@ plt.close()
 
 plt.plot(tau_lst, total_revenue_lst, label = "Total Revenue")
 plt.xlabel("Toll Price")
+plt.title(f"Max Revenue Achieved At: tau = {tau_lst[np.argmax(total_revenue_lst)]}")
 plt.legend()
 plt.savefig("3d_revenue_vs_toll.png")
 plt.clf()
