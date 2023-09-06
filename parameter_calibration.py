@@ -114,13 +114,14 @@ print("ugamma 2:", ugamma2, "ugamma 3:", ugamma3)
 
 df_latency = df_flow[["Time", "Station", "StationLength", "HOV Travel Time", "Ordinary Travel Time", "HOV Flow", "Ordinary Flow"]].copy()
 df_latency["Hour"] = df_flow["Time"].apply(lambda x: x.split(":")[0])
-df_latency = df_latency[["Hour", "Station", "StationLength", "HOV Travel Time", "Ordinary Travel Time", "HOV Flow", "Ordinary Flow"]].groupby(["Hour", "Station"]).sum().reset_index()
+df_latency = df_latency[["Hour", "Station", "StationLength", "HOV Travel Time", "Ordinary Travel Time", "HOV Flow", "Ordinary Flow"]].groupby(["Hour", "Station", "StationLength"]).sum().reset_index()
 df_latency_flow = df_latency[["Hour", "HOV Flow", "Ordinary Flow"]].groupby("Hour").mean().reset_index()
 df_latency_time = df_latency[["Hour", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby("Hour").sum().reset_index()
 df_latency = df_latency_flow.merge(df_latency_time, on = "Hour")
 df_latency["Ordinary Flow"] = df_latency["Ordinary Flow"] / (num_lanes - 1)
 df_latency["HOVTimePerMile"] = df_latency["HOV Travel Time"] / df_latency["StationLength"] * 60
 df_latency["OrdinaryTimePerMile"] = df_latency["Ordinary Travel Time"] / df_latency["StationLength"] * 60
+print("Total Distance:", df_latency.iloc[0]["StationLength"])
 
 power = 4
 
