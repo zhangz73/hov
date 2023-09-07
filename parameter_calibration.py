@@ -17,7 +17,7 @@ df = df.dropna(subset = ["Zone_Toll"])[["dtMsgStartTime2", "siZoneID", "iPlazaID
 df = df.fillna(0)
 df = df[df["siZoneID"] == RELEVANT_ZONE]
 df["Time"] = pd.to_datetime(df["dtMsgStartTime2"]).dt.strftime("%H:%M")
-df = df[(df["Time"] >= RELEVANT_TIME[0]) & (df["Time"] <= RELEVANT_TIME[1])]
+#df = df[(df["Time"] >= RELEVANT_TIME[0]) & (df["Time"] <= RELEVANT_TIME[1])]
 df["Toll"] = df["Zone_Toll"].astype(float)
 df = df[["Time", "Toll"]].groupby(["Time"]).mean().reset_index().sort_values("Time")
 
@@ -30,6 +30,7 @@ df = df[["Time", "Toll"]].groupby(["Time"]).mean().reset_index().sort_values("Ti
 df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
 sigma_2over1 = df_pop["TwoPeople"].sum() * 2 / df_pop["Single"].sum()
 sigma_3over1 = df_pop["ThreePlus"].sum() * 3 / df_pop["Single"].sum()
+sigma_2over3 = (df_pop["TwoPeople"].sum() * 2) / (df_pop["ThreePlus"].sum() * 3)
 
 ## Load station data
 #df_station = pd.read_csv("d04_text_meta_2021_03_19.txt", sep = "\t")
@@ -48,64 +49,65 @@ df_flow = df_flow[(df_flow["Direction"] == "N") & (df_flow["Freeway"] == 880) & 
 df_flow = df_flow[df_flow["Station"].isin(RELEVANT_STATIONS)]
 df_flow["Time"] = pd.to_datetime(df_flow["Timestamp"]).dt.strftime("%H:%M")
 df_flow["HOV Flow"] = df_flow["Lane 0 Flow"]
-df_flow["HOV Avg Speed"] = df_flow["Lane 0 Avg Speed"]
+## convert per hour speed to per minute speed
+df_flow["HOV Avg Speed"] = df_flow["Lane 0 Avg Speed"] / 60
 df_flow["HOV Travel Time"] = df_flow["StationLength"] / df_flow["HOV Avg Speed"]
 df_flow["Ordinary Flow"] = 0
 df_flow["Ordinary Avg Speed"] = 0
 for i in range(1, num_lanes):
     df_flow["Ordinary Flow"] += df_flow[f"Lane {i} Flow"]
-    df_flow["Ordinary Avg Speed"] += df_flow[f"Lane {i} Avg Speed"]
+    df_flow["Ordinary Avg Speed"] += df_flow[f"Lane {i} Avg Speed"] / 60
 df_flow["Ordinary Avg Speed"] /= num_lanes
 df_flow["Ordinary Travel Time"] = df_flow["StationLength"] / df_flow["Ordinary Avg Speed"]
 df_all = df.merge(df_flow, on = "Time")
+df_all["Hour"] = df_all["Time"].apply(lambda x: int(x.split(":")[0]))
+## Get total toll price, total distance, and total travel time of the selected line segment at each time (5-min)
 df_all_timetoll_gb = df_all[["Time", "Toll", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby(["Time", "Toll"]).sum().reset_index()
 avg_toll = df_all_timetoll_gb["Toll"].mean()
-print("Ordinary Travel Time", df_all_timetoll_gb["Ordinary Travel Time"].mean() * 60, "HOV Travel Time", df_all_timetoll_gb["HOV Travel Time"].mean() * 60)
+print("Ordinary Travel Time", df_all_timetoll_gb["Ordinary Travel Time"].mean(), "HOV Travel Time", df_all_timetoll_gb["HOV Travel Time"].mean())
 print("Toll:", avg_toll)
 
 ## Compute latency in mins, use it to infer \beta
-df_all_timetoll_gb["Latency"] = (df_all_timetoll_gb["Ordinary Travel Time"] - df_all_timetoll_gb["HOV Travel Time"]) * 60
+df_all_timetoll_gb["Latency"] = (df_all_timetoll_gb["Ordinary Travel Time"] - df_all_timetoll_gb["HOV Travel Time"])
 beta = (df_all_timetoll_gb["Toll"] / df_all_timetoll_gb["Latency"]).mean()
 print("Beta:", beta)
 
-## Compute flows
-df_all_station_gb = df_all[["Station", "HOV Flow", "Ordinary Flow"]].groupby("Station").sum().reset_index()
-df_all_station_gb["Total Flow"] = df_all_station_gb["HOV Flow"] + df_all_station_gb["Ordinary Flow"]
-print("Flow Avg.", df_all_station_gb[["HOV Flow", "Ordinary Flow", "Total Flow"]].mean().reset_index())
-print("Flow Std.", df_all_station_gb[["HOV Flow", "Ordinary Flow", "Total Flow"]].std().reset_index())
-total_flow = df_all_station_gb["Total Flow"].mean()
-ordinary_flow = df_all_station_gb["Ordinary Flow"].mean()
-hov_flow = df_all_station_gb["HOV Flow"].mean()
+## Compute per hour flows
+df_hour_station_gb = df_all[["Hour", "Station", "HOV Flow", "Ordinary Flow"]].copy()
+### Summing up 5-min flows to 1-hr flows
+df_hour_station_gb = df_hour_station_gb[["Hour", "Station", "HOV Flow", "Ordinary Flow"]].groupby(["Hour", "Station"]).sum().reset_index()
+### Averaging the flows across all stations
+df_hour_flow_gb = df_hour_station_gb.groupby("Hour").mean().reset_index()
 
-## Calibrate parameters
-def solve_gamma2(D, tau, sigma_pool2, sigma_pool3, max_itr = 100, eta = 0.1, eps = 1e-7):
-    x = torch.tensor(0.1, requires_grad = True)
-    itr = 0
-    loss = 1
-    loss_arr = []
-    while itr < max_itr and loss > eps:
-        lhs = x * (1/2 * tau * sigma_pool3 + (3/4 * tau - (tau - x)**2 / tau) * sigma_pool2)
-        rhs = 3/8 * tau ** 2 - 1/2 * (tau - x) ** 2
-        loss = (lhs - rhs) ** 2
-        print(loss)
-        loss_arr.append(float(loss.data))
-        if loss <= eps:
-            break
-        loss.backward()
-        x.data = x.data - eta * x.grad
-        x.grad.zero_()
-    x = float(x.detach().numpy())
-    return x, loss_arr
+## Compute per hour avg toll price
+df_hour_toll_gb = df_all[["Hour", "Toll"]].groupby("Hour").mean().reset_index()
 
-sigma_o = hov_flow / total_flow * (num_lanes - 1)
-sigma_toll = (1 - sigma_o) / (1 + sigma_2over1 + sigma_3over1)
-sigma_pool2 = sigma_toll * sigma_2over1
-sigma_pool3 = sigma_toll * sigma_3over1
-print("sigma_o:", sigma_o, "sigma_toll", sigma_toll, "sigma_pool2", sigma_pool2, "sigma_pool3:", sigma_pool3)
-ugamma3 = 1/2 * avg_toll + 3/4 * sigma_pool2/sigma_pool3
-ugamma2 = 3/8 * avg_toll**2 / (sigma_pool3 * ugamma3)
-#ugamma2, loss_arr = solve_gamma2(total_flow, avg_toll, sigma_pool2, sigma_pool3, max_itr = 100, eta = 1e-4, eps = 1e-7)
-#ugamma3 = 1/2 * avg_toll + (3/4 * avg_toll - (avg_toll - ugamma2)**2 / avg_toll) * sigma_pool2/sigma_pool3
+## Merge to obtain per hour flow & toll prices
+df_hour_flow_toll_gb = df_hour_flow_gb.merge(df_hour_toll_gb, on = "Hour")
+df_hour_flow_toll_gb = df_hour_flow_toll_gb[(df_hour_flow_toll_gb["Hour"] >= 8) & (df_hour_flow_toll_gb["Hour"] <= 17)]
+
+#plt.plot(df_hour_flow_toll_gb["Hour"], df_hour_flow_toll_gb["HOV Flow"], label = "HOV Flow")
+#plt.plot(df_hour_flow_toll_gb["Hour"], df_hour_flow_toll_gb["Ordinary Flow"], label = "Ordinary Flow")
+#plt.legend()
+#plt.show()
+#
+#plt.plot(df_hour_flow_toll_gb["Hour"], df_hour_flow_toll_gb["Toll"])
+#plt.show()
+#
+#assert False
+
+## Compute \ugamma_3 by (\sum_t D_t \sigma_2) / (\sum_t D_t \sigma_3) = r_{2/3}
+ugamma3 = (3 * sigma_2over3 * (df_hour_flow_toll_gb["Toll"] ** 2).sum() + 2 * (df_hour_flow_toll_gb["Toll"] ** 2).sum()) / (4 * df_hour_flow_toll_gb["Toll"]).sum()
+
+## Compute \ugamma_2:
+###     \sigma_o = f_o / D
+###     \sigma_toll + \sigma_2 + \sigma_3 = 1 - \sigma_o
+###     \sigma_toll + 1/2\sigma_2 + 1/3\sigma_3 = f_hov / D
+sigma_o_over_hov = (df_hour_flow_toll_gb["Ordinary Flow"] / (num_lanes - 1)) / df_hour_flow_toll_gb["HOV Flow"]
+r_2over3 = (4 * ugamma3 * df_hour_flow_toll_gb["Toll"] - 2 * (df_hour_flow_toll_gb["Toll"] ** 2)) / (3 * (df_hour_flow_toll_gb["Toll"] ** 2))
+toll_coef = 1 + sigma_o_over_hov
+pool3_coef = ((1 + 1/2 * sigma_o_over_hov) / r_2over3 + (1 + 1/3 * sigma_o_over_hov)) * (r_2over3 > 0.05) + (1 + 1/3 * sigma_o_over_hov) * (r_2over3 < 0.05)
+ugamma2 = ((3/8 * df_hour_flow_toll_gb["Toll"] ** 2).sum() / sigma_3over1 + (pool3_coef/toll_coef * 3/8 * df_hour_flow_toll_gb["Toll"] ** 2).sum()) / (ugamma3 / toll_coef).sum()
 print("ugamma 2:", ugamma2, "ugamma 3:", ugamma3)
 
 #plt.plot(loss_arr)
@@ -119,8 +121,8 @@ df_latency_flow = df_latency[["Hour", "HOV Flow", "Ordinary Flow"]].groupby("Hou
 df_latency_time = df_latency[["Hour", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby("Hour").sum().reset_index()
 df_latency = df_latency_flow.merge(df_latency_time, on = "Hour")
 df_latency["Ordinary Flow"] = df_latency["Ordinary Flow"] / (num_lanes - 1)
-df_latency["HOVTimePerMile"] = df_latency["HOV Travel Time"] / df_latency["StationLength"] * 60
-df_latency["OrdinaryTimePerMile"] = df_latency["Ordinary Travel Time"] / df_latency["StationLength"] * 60
+df_latency["HOVTimePerMile"] = df_latency["HOV Travel Time"] / df_latency["StationLength"]
+df_latency["OrdinaryTimePerMile"] = df_latency["Ordinary Travel Time"] / df_latency["StationLength"]
 print("Total Distance:", df_latency.iloc[0]["StationLength"])
 
 power = 4

@@ -7,9 +7,9 @@ from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-UGAMMA2 = 19.536
-UGAMMA3 = 2.510
-BETA = 0.525
+UGAMMA2 = 4.345 #19.536
+UGAMMA3 = 2.463 #2.510
+BETA = 0.361 #0.525
 POWER = 4
 NUM_LANES = 4
 a = 3.9427e-12
@@ -146,7 +146,7 @@ total_emission_lst = []
 total_revenue_lst = []
 loss_lst = []
 tau_lst = []
-for tau in tqdm(np.arange(0, 40, 0.2)):
+for tau in tqdm(np.arange(0, 10, 0.1)):
     sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large = solve_sigma(tau, rho, max_itr = 2000, eta = 1e-1, eps = 1e-7, min_eta = 1e-10)
     total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3)
     total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3)
