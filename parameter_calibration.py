@@ -69,8 +69,8 @@ df_all["Hour"] = df_all["Time"].apply(lambda x: int(x.split(":")[0]))
 ## Get total toll price, total distance, and total travel time of the selected line segment at each time (5-min)
 df_all_timetoll_gb = df_all[["Time", "Toll", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby(["Time", "Toll"]).sum().reset_index()
 avg_toll = df_all_timetoll_gb["Toll"].mean()
-print("Ordinary Travel Time", df_all_timetoll_gb["Ordinary Travel Time"].mean(), "HOV Travel Time", df_all_timetoll_gb["HOV Travel Time"].mean())
-print("Toll:", avg_toll)
+print("Ordinary Travel Time (mins)", df_all_timetoll_gb["Ordinary Travel Time"].mean(), "HOV Travel Time (mins)", df_all_timetoll_gb["HOV Travel Time"].mean())
+print("Avg Toll:", avg_toll)
 
 ## Compute latency in mins, use it to infer \beta
 df_all_timetoll_gb["Latency"] = (df_all_timetoll_gb["Ordinary Travel Time"] - df_all_timetoll_gb["HOV Travel Time"])

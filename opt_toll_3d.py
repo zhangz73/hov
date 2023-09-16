@@ -7,15 +7,17 @@ from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-UGAMMA2 = 13.517 #5.024 #19.536
-UGAMMA3 = 2.711 #2.643 #2.510
-BETA = 0.376 #0.525
+UGAMMA2 = 13.517 #5.024 #19.536 $
+UGAMMA3 = 2.711 #2.643 #2.510 $
+BETA = 0.376 #0.525 $/min
 POWER = 4
 NUM_LANES = 4
 a = 3.9427e-12
 b = 10.547
-D = 6522 #5363
-DISTANCE = 7.16
+D = 6522 #5363 # people/hr
+DISTANCE = 7.16 # miles
+## Ordinary Lane Travel Time at 17 pm: 15.07 mins
+## HOT Lane Travel Time at 17 pm: 8.14 mins
 
 def cost(flow):
     return a * flow ** POWER + b
