@@ -67,15 +67,16 @@ df_flow["Ordinary Travel Time"] = df_flow["StationLength"] / df_flow["Ordinary A
 df_all = df.merge(df_flow, on = "Time")
 df_all["Hour"] = df_all["Time"].apply(lambda x: int(x.split(":")[0]))
 ## Get total toll price, total distance, and total travel time of the selected line segment at each time (5-min)
-df_all_timetoll_gb = df_all[["Time", "Toll", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby(["Time", "Toll"]).sum().reset_index()
+df_all_timetoll_gb = df_all[["Hour", "Time", "Toll", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby(["Hour", "Time", "Toll"]).sum().reset_index()
 avg_toll = df_all_timetoll_gb["Toll"].mean()
-print("Ordinary Travel Time (mins)", df_all_timetoll_gb["Ordinary Travel Time"].mean(), "HOV Travel Time (mins)", df_all_timetoll_gb["HOV Travel Time"].mean())
 print("Avg Toll:", avg_toll)
-
 ## Compute latency in mins, use it to infer \beta
 df_all_timetoll_gb["Latency"] = (df_all_timetoll_gb["Ordinary Travel Time"] - df_all_timetoll_gb["HOV Travel Time"])
 beta = (df_all_timetoll_gb["Toll"] / df_all_timetoll_gb["Latency"]).mean()
 print("Beta:", beta)
+
+df_all_timetoll_gb = df_all_timetoll_gb[df_all_timetoll_gb["Hour"] == RELEVANT_HOUR]
+print("Ordinary Travel Time (mins)", df_all_timetoll_gb["Ordinary Travel Time"].mean(), "HOV Travel Time (mins)", df_all_timetoll_gb["HOV Travel Time"].mean())
 
 ## Compute per hour flows
 df_hour_station_gb = df_all[["Hour", "Station", "HOV Flow", "Ordinary Flow"]].copy()
@@ -159,11 +160,15 @@ plt.plot(loss_arr)
 plt.title(f"Final Loss: {loss_arr[-1]:.2f}")
 plt.show()
 
+## TODO: Fix it!!!
+##  Travel time should NOT be summed across 5-mins, it should be taken average grouping across 5-min intervals
+## Travel time can be summed by stations
+##  Flows should be summed by 5-mins but averaged across stations
 df_latency = df_flow[["Time", "Station", "StationLength", "HOV Travel Time", "Ordinary Travel Time", "HOV Flow", "Ordinary Flow"]].copy()
 df_latency["Hour"] = df_flow["Time"].apply(lambda x: x.split(":")[0])
-df_latency = df_latency[["Hour", "Station", "StationLength", "HOV Travel Time", "Ordinary Travel Time", "HOV Flow", "Ordinary Flow"]].groupby(["Hour", "Station", "StationLength"]).sum().reset_index()
-df_latency_flow = df_latency[["Hour", "HOV Flow", "Ordinary Flow"]].groupby("Hour").mean().reset_index()
-df_latency_time = df_latency[["Hour", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby("Hour").sum().reset_index()
+df_latency_flow = df_latency[["Hour", "Station", "StationLength", "HOV Flow", "Ordinary Flow"]].groupby(["Hour", "Station", "StationLength"]).sum().groupby(["Hour"]).mean().reset_index()
+df_latency_time = df_latency[["Hour", "Time", "StationLength", "HOV Travel Time", "Ordinary Travel Time"]].groupby(["Hour", "Time"]).sum().groupby(["Hour"]).mean().reset_index()
+
 df_latency = df_latency_flow.merge(df_latency_time, on = "Hour")
 df_latency["Ordinary Flow"] = df_latency["Ordinary Flow"] / (num_lanes - 1)
 df_latency["HOVTimePerMile"] = df_latency["HOV Travel Time"] / df_latency["StationLength"]
@@ -210,4 +215,5 @@ plt.scatter(x_lst, y_lst, color = "red")
 plt.xlim(X.min() - 10, X.max() + 10)
 plt.show()
 
-print(0.15 / (reg.coef_ ** 0.25))
+print(reg.coef_ ** 0.25)
+#print(0.15 / (reg.coef_ ** 0.25))
