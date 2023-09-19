@@ -5,6 +5,7 @@ import torch
 from scipy import optimize
 from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 from tqdm import tqdm
 
 UGAMMA2 = 13.517 #5.024 #19.536 $
@@ -18,6 +19,23 @@ D = 6522 #5363 # people/hr
 DISTANCE = 7.16 # miles
 ## Ordinary Lane Travel Time at 17 pm: 18.28 mins
 ## HOT Lane Travel Time at 17 pm: 9.46 mins
+
+TIME_FREQ = 5
+RELEVANT_ZONE = "3460 - Hesperian/238 NB"
+df_demand = pd.read_csv("hourly_demand_20210401.csv")
+df_demand = df_demand[["Hour", "Total Demand"]]
+df_toll = pd.read_csv("NB_042021-062021.csv")
+df_toll = df_toll[pd.to_numeric(df_toll["Zone_Toll"], errors='coerce').notnull()]
+df_toll = df_toll.dropna(subset = ["Zone_Toll"])[["dtMsgStartTime2", "siZoneID", "iPlazaID", "Zone_Toll", "Segment_Toll"]]
+df_toll = df_toll.fillna(0)
+df_toll = df_toll[df_toll["siZoneID"] == RELEVANT_ZONE]
+df_toll["Date"] = pd.to_datetime(df_toll["dtMsgStartTime2"]).dt.strftime("%Y-%m-%d")
+df_toll["Time"] = pd.to_datetime(df_toll["dtMsgStartTime2"]).dt.strftime("%H:%M")
+df_toll["Hour"] = df_toll["Time"].apply(lambda x: int(x.split(":")[0]))
+df_toll = df_toll[df_toll["Date"] == "2021-04-01"]
+df_toll["Toll"] = df_toll["Zone_Toll"].astype(float)
+df_all = df_demand.merge(df_toll, on = "Hour")
+df_all = df_all[["Time", "Hour", "Total Demand", "Toll"]].drop_duplicates().sort_values("Time").reset_index()
 
 def cost(flow):
     return a * flow ** POWER + b
@@ -72,35 +90,35 @@ def get_sigma(tau, sigma_toll, rho = 0):
 def sigma_is_feasible(sigma_o, sigma_toll, sigma_pool2, sigma_pool3):
     return sigma_o >= 0 and sigma_o <= 1 and sigma_toll >= 0 and sigma_toll <= 1 and sigma_pool2 >= 0 and sigma_pool2 <= 1 and sigma_pool3 >= 0 and sigma_pool3 <= 1
 
-def tau_larger_than_voftime(tau, rho):
+def tau_larger_than_voftime(tau, rho, D = D):
     sigma_o, sigma_toll, sigma_pool2, sigma_pool3, tau_not_too_large = get_sigma(tau, 0, rho)
-    c_delta = get_travel_time_ordinary(rho, sigma_o) - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3)
+    c_delta = get_travel_time_ordinary(rho, sigma_o, D = D) - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D)
 #    print(sigma_o, sigma_toll, sigma_pool2, sigma_pool3, c_delta, tau / BETA)
     return c_delta < tau / BETA or not tau_not_too_large
 
-def get_travel_time_ordinary(rho, sigma_o):
+def get_travel_time_ordinary(rho, sigma_o, D = D):
     return cost(D * sigma_o / ((1 - rho) * NUM_LANES)) * DISTANCE
 
-def get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3):
+def get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D):
     return cost(D * (sigma_toll + 1/2 * sigma_pool2 + 1/3 * sigma_pool3) / (rho * NUM_LANES)) * DISTANCE
 
-def get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3):
-    travel_time_o = get_travel_time_ordinary(rho, sigma_o)
-    travel_time_hov = get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3)
+def get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D):
+    travel_time_o = get_travel_time_ordinary(rho, sigma_o, D = D)
+    travel_time_hov = get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D)
     return sigma_o * travel_time_o + (sigma_toll + sigma_pool2 + sigma_pool3) * travel_time_hov
 
-def get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3):
-    travel_time_o = get_travel_time_ordinary(rho, sigma_o)
-    travel_time_hov = get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3)
+def get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D):
+    travel_time_o = get_travel_time_ordinary(rho, sigma_o, D = D)
+    travel_time_hov = get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D)
     return sigma_o * travel_time_o + (sigma_toll + 1/2 * sigma_pool2 + 1/3 * sigma_pool3) * travel_time_hov
 
-def get_total_revenue(tau, sigma_toll):
+def get_total_revenue(tau, sigma_toll, D = D):
     return tau * sigma_toll * D
 
-def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8):
+def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8, D = D):
     loss = 1
     loss_arr = []
-    if not tau_larger_than_voftime(tau, rho):
+    if not tau_larger_than_voftime(tau, rho, D = D):
         sigma_o, sigma_toll, sigma_pool2, sigma_pool3, _ = get_sigma(tau, 0)
         sigma_toll_init = (1 - sigma_pool2 - sigma_pool3) / 2 #(1 - 1/(UGAMMA2*UGAMMA3) * (1/2*tau*UGAMMA3 + 1/8*tau**2)) / 2 #0.2
         sigma_toll = torch.tensor(sigma_toll_init, requires_grad = True)
@@ -110,7 +128,7 @@ def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8):
             if not tau_not_too_large:
                 loss_arr.append(0)
                 break
-            loss = torch.abs(get_travel_time_ordinary(rho, sigma_o) / DISTANCE - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3) / DISTANCE - tau / BETA / DISTANCE) ** 2
+            loss = torch.abs(get_travel_time_ordinary(rho, sigma_o, D = D) / DISTANCE - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D) / DISTANCE - tau / BETA / DISTANCE) ** 2
             loss_arr.append(float(loss.data))
             rerun = False
             if loss <= eps:
@@ -135,7 +153,7 @@ def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8):
         itr = 0
         while loss > eps and itr < max_itr and eta >= min_eta:
             sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma_o, 0, 0, 1 - sigma_o
-            c_delta = get_travel_time_ordinary(rho, sigma_o) - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3)
+            c_delta = get_travel_time_ordinary(rho, sigma_o, D = D) - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D)
             target_sigma_pool3 = auc_rec(UGAMMA2, UGAMMA3, BETA * c_delta)
 #            print(BETA * c_delta, target_sigma_pool3)
             loss = torch.abs(target_sigma_pool3 - sigma_pool3) ** 2
@@ -205,7 +223,47 @@ def compute_pareto_front(df, colname, xlabel, fname):
     plt.savefig(f"pareto_{fname}_sep.png")
     plt.clf()
     plt.close()
-    
+
+def grid_search(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file = True, D = D):
+    total_travel_time_lst = []
+    total_emission_lst = []
+    total_revenue_lst = []
+    loss_lst = []
+    tau_lst = []
+    rho_lst = []
+    sigma_o_lst = []
+    sigma_toll_lst = []
+    sigma_pool2_lst = []
+    sigma_pool3_lst = []
+    for tau in tqdm(toll_lst, leave = False):
+        for rho in rho_vals:
+            sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large = solve_sigma(tau, rho, max_itr = 5000, eta = 1e-1, eps = 1e-7, min_eta = 1e-10, D = D)
+            total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
+            total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
+            total_revenue = get_total_revenue(tau, sigma_toll, D = D)
+            
+            if len(loss_arr) == 0:
+#                print(tau, rho)
+                loss_arr = [0.]
+            
+            total_travel_time_lst.append(total_travel_time)
+            total_emission_lst.append(total_emission)
+            total_revenue_lst.append(total_revenue)
+            loss_lst.append(loss_arr[-1])
+            tau_lst.append(tau)
+            rho_lst.append(rho)
+            sigma_o_lst.append(sigma_o)
+            sigma_toll_lst.append(sigma_toll)
+            sigma_pool2_lst.append(sigma_pool2)
+            sigma_pool3_lst.append(sigma_pool3)
+
+    df = pd.DataFrame.from_dict({"% Ordinary": sigma_o_lst, "% Toll": sigma_toll_lst, "% Pool 2": sigma_pool2_lst, "% Pool 3": sigma_pool3_lst, "Total Travel Time": total_travel_time_lst, "Total Emission": total_emission_lst, "Total Revenue": total_revenue_lst, "Loss": loss_lst, "Toll Price": tau_lst, "HOT Capacity": rho_lst})
+    if save_to_file:
+        df.to_csv("opt_3d_results.csv", index = False)
+    return df
+
+"""
+### Pipeline for 5-6 pm optimal toll & HOT capacity design
 DEBUG = False
 RETRAIN = False
 
@@ -214,7 +272,7 @@ RETRAIN = False
 if DEBUG:
     tau = 15 #4.735
     rho = 3/4
-    sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large = solve_sigma(tau, rho, max_itr = 5000, eta = 1e-1, eps = 1e-9, min_eta = 1e-10)
+    sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large = solve_sigma(tau, rho, max_itr = 5000, eta = 1e-1, eps = 1e-9, min_eta = 1e-10, D = D)
     print(tau_not_too_large)
 
     print("Sigma_o:", sigma_o, "Sigma_toll:", sigma_toll, "Sigma_pool2:", sigma_pool2, "Sigma_pool3:", sigma_pool3)
@@ -224,40 +282,7 @@ if DEBUG:
 else:
     rho_vals = [1/4, 2/4, 3/4]
     if RETRAIN:
-        total_travel_time_lst = []
-        total_emission_lst = []
-        total_revenue_lst = []
-        loss_lst = []
-        tau_lst = []
-        rho_lst = []
-        sigma_o_lst = []
-        sigma_toll_lst = []
-        sigma_pool2_lst = []
-        sigma_pool3_lst = []
-        for tau in tqdm(np.arange(0, 15, 0.1)):
-            for rho in rho_vals:
-                sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large = solve_sigma(tau, rho, max_itr = 5000, eta = 1e-1, eps = 1e-7, min_eta = 1e-10)
-                total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3)
-                total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3)
-                total_revenue = get_total_revenue(tau, sigma_toll)
-                
-                if len(loss_arr) == 0:
-    #                print(tau, rho)
-                    loss_arr = [0.]
-                
-                total_travel_time_lst.append(total_travel_time)
-                total_emission_lst.append(total_emission)
-                total_revenue_lst.append(total_revenue)
-                loss_lst.append(loss_arr[-1])
-                tau_lst.append(tau)
-                rho_lst.append(rho)
-                sigma_o_lst.append(sigma_o)
-                sigma_toll_lst.append(sigma_toll)
-                sigma_pool2_lst.append(sigma_pool2)
-                sigma_pool3_lst.append(sigma_pool3)
-
-        df = pd.DataFrame.from_dict({"% Ordinary": sigma_o_lst, "% Toll": sigma_toll_lst, "% Pool 2": sigma_pool2_lst, "% Pool 3": sigma_pool3_lst, "Total Travel Time": total_travel_time_lst, "Total Emission": total_emission_lst, "Total Revenue": total_revenue_lst, "Loss": loss_lst, "Toll Price": tau_lst, "HOT Capacity": rho_lst})
-        df.to_csv("opt_3d_results.csv", index = False)
+        df = grid_search(rho_vals = rho_vals, tau_lst = np.arange(0, 15, 0.1), save_to_file = True, D = D)
     else:
         df = pd.read_csv("opt_3d_results.csv")
 
@@ -307,5 +332,60 @@ else:
     plt.close()
     
     ## Compute Pareto Fronts
-#    compute_pareto_front(df, "Total Travel Time", "Average Traffic Time Per Traveler (Minutes)", "latency")
-#    compute_pareto_front(df, "Total Emission", "Average Emission Per Traveler (Minutes)", "emission")
+    compute_pareto_front(df, "Total Travel Time", "Average Traffic Time Per Traveler (Minutes)", "latency")
+    compute_pareto_front(df, "Total Emission", "Average Emission Per Traveler (Minutes)", "emission")
+"""
+
+### Pipeline for dynamic toll & HOT capacity design
+RETRAIN = False
+if RETRAIN:
+    rho_vals = [1/4, 2/4, 3/4]
+    hour_lst = []
+    rho_lst = []
+    min_congestion_lst = []
+    min_congestion_tau_lst = []
+    min_emission_lst = []
+    min_emission_tau_lst = []
+    max_revenue_lst = []
+    max_revenue_tau_lst = []
+    for t in tqdm(np.array(df_all["Hour"].unique())):
+        demand = df_all[df_all["Hour"] == t].iloc[0]["Total Demand"]
+        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = False, D = demand)
+        for rho in tqdm(rho_vals, leave = False):
+            df_tmp = df[df["HOT Capacity"] == rho]
+            min_congestion = df_tmp["Total Travel Time"].min()
+            min_congestion_tau = df_tmp.iloc[df_tmp["Total Travel Time"].argmin()]["Toll Price"]
+            min_emission = df_tmp["Total Emission"].min()
+            min_emission_tau = df_tmp.iloc[df_tmp["Total Emission"].argmin()]["Toll Price"]
+            max_revenue = df_tmp["Total Revenue"].min()
+            max_revenue_tau = df_tmp.iloc[df_tmp["Total Revenue"].argmax()]["Toll Price"]
+            hour_lst.append(t)
+            rho_lst.append(rho)
+            min_congestion_lst.append(min_congestion)
+            min_congestion_tau_lst.append(min_congestion_tau)
+            min_emission_lst.append(min_emission)
+            min_emission_tau_lst.append(min_emission_tau)
+            max_revenue_lst.append(max_revenue)
+            max_revenue_tau_lst.append(max_revenue_tau)
+
+    df_dynamic = pd.DataFrame.from_dict({"Hour": hour_lst, "Rho": rho_lst, "Min Congestion": min_congestion_lst, "Min Congestion Toll": min_congestion_tau_lst, "Min Emission": min_emission_lst, "Min Emission Toll": min_emission_tau_lst, "Max Revenue": max_revenue_lst, "Max Revenue Toll": max_revenue_tau_lst})
+    df_dynamic.to_csv("time_dynamic_design.csv", index = False)
+else:
+    df_dynamic = pd.read_csv("time_dynamic_design.csv")
+
+feat_lst = ["Min Congestion", "Min Emission", "Max Revenue"]
+rho = 0.25
+for feat in feat_lst:
+    time_lst = pd.to_datetime(df_all["Time"], format="%H:%M")
+    opt_toll = np.repeat(np.array(df_dynamic[df_dynamic["Rho"] == rho][f"{feat} Toll"]), 60 // TIME_FREQ)
+    curr_toll = df_all["Toll"]
+    plt.plot(time_lst, opt_toll, label = "Optimal Toll Price", color = "red")
+    plt.scatter(time_lst, curr_toll, label = "Current Toll Price", color = "blue")
+    plt.gcf().axes[0].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    plt.gcf().autofmt_xdate()
+    plt.xlabel("Time of Day")
+    plt.ylabel(f"Optimal Toll Price For {feat}")
+    plt.legend()
+    plt.savefig(f"DynamicDesign/{feat.lower().replace(' ', '_')}.png")
+    plt.clf()
+    plt.close()

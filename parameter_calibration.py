@@ -177,6 +177,7 @@ print("Total Distance:", df_latency.iloc[0]["StationLength"])
 ## TODO: Compute total demand per hour using calibrated ugamma2 and ugamma3
 df_hour_flow_toll_gb["Total Demand"] = (df_hour_flow_toll_gb["Ordinary Flow"] + df_hour_flow_toll_gb["HOV Flow"]) / (ugamma2 * ugamma3 - 1/4 * ugamma3 * df_hour_flow_toll_gb["Toll"] - 1/8 * df_hour_flow_toll_gb["Toll"] ** 2) * ugamma2 * ugamma3
 print("Total Demand:", df_hour_flow_toll_gb[df_hour_flow_toll_gb["Hour"] == RELEVANT_HOUR].iloc[0]["Total Demand"])
+df_hour_flow_toll_gb.to_csv("hourly_demand_20210401.csv", index = False)
 #print("Total Demand:", df_latency[df_latency["Hour"] == RELEVANT_HOUR].iloc[0]["Total Demand"])
 
 power = 4
