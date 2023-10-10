@@ -30,18 +30,18 @@ for i in range(1, 13):
     df_flow["HOV Flow"] = df_flow["Lane 0 Flow"]
     # df_flow["Ordinary Flow"] = df_flow["Total Flow"]- df_flow["Lane 0 Flow"]
     
-    df_flow["HOV Travel Time"] = df_flow["StationLength"]/df_flow["Lane 0 Avg Speed"]
+    df_flow["HOV Travel Time"] = df_flow["StationLength"]/df_flow["Lane 0 Avg Speed"]*60
 
     df_flow["Ordinary Cum Speed"] = 0
     df_flow["Ordinary Flow"] = 0
     # for j in range(1,7):
     #      df_flow["Ordinary Cum Speed"] +=  df_flow["Lane " + str(j) + " Avg Speed"]* df_flow["Lane " + str(j) + " Flow"]
     # df_flow["Ordinary Avg Speed"] = df_flow["Ordinary Cum Speed"]/df_flow["Ordinary Flow"]
-    for j in range(1,5):
+    for j in range(1,4):
          df_flow["Ordinary Cum Speed"] +=  df_flow["Lane " + str(j) + " Avg Speed"]
          df_flow["Ordinary Flow"] += df_flow["Lane " + str(j) + " Flow"]
-    df_flow["Ordinary Avg Speed"] = df_flow["Ordinary Cum Speed"]/4
-    df_flow["Ordinary Travel Time"] = df_flow["StationLength"]/df_flow["Ordinary Avg Speed"]
+    df_flow["Ordinary Avg Speed"] = df_flow["Ordinary Cum Speed"]/3
+    df_flow["Ordinary Travel Time"] = df_flow["StationLength"]/df_flow["Ordinary Avg Speed"]*60
 
 
     df_flow["Time"] = pd.to_datetime(df_flow["Timestamp"])
