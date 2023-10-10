@@ -23,7 +23,7 @@ for i in range(1, 13):
     df_flow = df_flow.loc[df_flow["Freeway"] == 880]
     df_flow = df_flow.loc[df_flow["Station"].isin(RELEVANT_STATIONS)]
     df_flow = df_flow.loc[df_flow["LaneType"] == 'ML']
-    df_flow = df_flow.loc[df_flow["% Observed"] >= 75]
+    # df_flow = df_flow.loc[df_flow["% Observed"] >= 75]
     df_flow = df_flow.loc[df_flow["Direction"] == 'N']
     df_flow = df_flow.fillna(0)
 
