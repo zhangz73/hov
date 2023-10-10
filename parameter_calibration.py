@@ -62,7 +62,7 @@ df_flow["Ordinary Avg Speed"] = 0
 for i in range(1, num_lanes):
     df_flow["Ordinary Flow"] += df_flow[f"Lane {i} Flow"]
     df_flow["Ordinary Avg Speed"] += df_flow[f"Lane {i} Avg Speed"] / 60
-df_flow["Ordinary Avg Speed"] /= num_lanes
+df_flow["Ordinary Avg Speed"] /= (num_lanes - 1)
 df_flow["Ordinary Travel Time"] = df_flow["StationLength"] / df_flow["Ordinary Avg Speed"]
 df_all = df.merge(df_flow, on = "Time")
 df_all["Hour"] = df_all["Time"].apply(lambda x: int(x.split(":")[0]))
