@@ -72,8 +72,9 @@ avg_toll = df_all_timetoll_gb["Toll"].mean()
 print("Avg Toll:", avg_toll)
 ## Compute latency in mins, use it to infer \beta
 df_all_timetoll_gb["Latency"] = (df_all_timetoll_gb["Ordinary Travel Time"] - df_all_timetoll_gb["HOV Travel Time"])
-beta = (df_all_timetoll_gb["Toll"] / df_all_timetoll_gb["Latency"]).mean()
+beta = (df_all_timetoll_gb["Toll"] / df_all_timetoll_gb["Latency"]).median()
 print("Beta:", beta)
+assert False
 
 df_all_timetoll_gb = df_all_timetoll_gb[df_all_timetoll_gb["Hour"] == RELEVANT_HOUR]
 print("Ordinary Travel Time (mins)", df_all_timetoll_gb["Ordinary Travel Time"].mean(), "HOV Travel Time (mins)", df_all_timetoll_gb["HOV Travel Time"].mean())

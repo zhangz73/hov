@@ -49,7 +49,7 @@ def compute_pareto_front(df, colname, xlabel, fname):
     plt.close()
 
 df = pd.read_csv("opt_3d_results.csv")
-
+rho_vals = [0.25, 0.5, 0.75]
 ## Visualize price curves
 for rho in rho_vals:
     plt.plot(df[df["HOT Capacity"] == rho]["Toll Price"], df[df["HOT Capacity"] == rho]["Total Travel Time"], label = f"$\\rho = {rho}$")

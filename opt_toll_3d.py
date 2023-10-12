@@ -10,14 +10,14 @@ from tqdm import tqdm
 
 UGAMMA2 = 13.517 #5.024 #19.536 $
 UGAMMA3 = 2.711 #2.643 #2.510 $
-BETA = 0.376 #0.525 $/min
+BETA = 0.877 #0.952#0.376 #0.525 $/min
 POWER = 4
 NUM_LANES = 4
-a = 3.2856e-13 #3.9427e-12
-b = 0.8789 #10.547
-D = 6522 #5363 # people/hr
+a = 2.4115e-13 #3.2856e-13 #3.9427e-12
+b = 0.7906 #0.8789 #10.547
+D = 6364 #6522 #5363 # people/hr
 DISTANCE = 7.16 # miles
-## Ordinary Lane Travel Time at 17 pm: 18.28 mins
+## Ordinary Lane Travel Time at 17 pm: 13.71 mins ##18.28 mins
 ## HOT Lane Travel Time at 17 pm: 9.46 mins
 
 TIME_FREQ = 5
@@ -123,6 +123,8 @@ def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8, 
         sigma_toll_init = (1 - sigma_pool2 - sigma_pool3) / 2 #(1 - 1/(UGAMMA2*UGAMMA3) * (1/2*tau*UGAMMA3 + 1/8*tau**2)) / 2 #0.2
         sigma_toll = torch.tensor(sigma_toll_init, requires_grad = True)
         itr = 0
+        sigma_toll_opt = sigma_toll.clone()
+        loss_opt = 1
         while loss > eps and itr < max_itr and eta >= min_eta:
             sigma_o, sigma_toll, sigma_pool2, sigma_pool3, tau_not_too_large = get_sigma(tau, sigma_toll)
             if not tau_not_too_large:
@@ -131,9 +133,12 @@ def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8, 
             loss = torch.abs(get_travel_time_ordinary(rho, sigma_o, D = D) / DISTANCE - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D) / DISTANCE - tau / BETA / DISTANCE) ** 2
             loss_arr.append(float(loss.data))
             rerun = False
+            if loss < loss_opt:
+                sigma_toll_opt = sigma_toll.clone()
+                loss_opt = float(loss.data)
             if loss <= eps:
                 break
-            if torch.isnan(loss) or itr >= max_itr - 1:
+            if torch.isnan(loss) or itr >= max_itr - 1 or sigma_o < 0 or sigma_toll < 0 or sigma_pool2 < 0 or sigma_pool3 < 0:
                 itr = 0
                 eta /= 10
                 loss_arr = []
@@ -145,12 +150,14 @@ def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8, 
                 sigma_toll.data = sigma_toll.data - eta * sigma_toll.grad
                 sigma_toll.grad.zero_()
                 itr += 1
-        sigma_toll = float(sigma_toll.detach().data)
+        sigma_toll = float(sigma_toll_opt.detach().data)
         sigma_o, sigma_toll, sigma_pool2, sigma_pool3, tau_not_too_large = get_sigma(tau, sigma_toll)
     else:
         sigma_o_init = (1-rho)/(1+2*rho) #(1 + (1-rho)/(1+2*rho)) / 2 #0.5
         sigma_o = torch.tensor(sigma_o_init, requires_grad = True)
         itr = 0
+        sigma_o_opt = sigma_o.clone()
+        loss_opt = 1
         while loss > eps and itr < max_itr and eta >= min_eta:
             sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma_o, 0, 0, 1 - sigma_o
             c_delta = get_travel_time_ordinary(rho, sigma_o, D = D) - get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D = D)
@@ -159,6 +166,9 @@ def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8, 
             loss = torch.abs(target_sigma_pool3 - sigma_pool3) ** 2
             loss_arr.append(float(loss.data))
             rerun = False
+            if loss < loss_opt:
+                sigma_o_opt = sigma_o.clone()
+                loss_opt = float(loss.data)
             if loss <= eps:
                 break
             if torch.isnan(loss) or itr >= max_itr - 1:
@@ -173,7 +183,7 @@ def solve_sigma(tau, rho, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8, 
                 sigma_o.data = sigma_o.data - eta * sigma_o.grad
                 sigma_o.grad.zero_()
                 itr += 1
-        sigma_o = float(sigma_o.detach().data)
+        sigma_o = float(sigma_o_opt.detach().data)
         sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma_o, 0, 0, 1 - sigma_o
         tau_not_too_large = False
     return sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large
@@ -262,16 +272,15 @@ def grid_search(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file = True, 
         df.to_csv("opt_3d_results.csv", index = False)
     return df
 
-"""
 ### Pipeline for 5-6 pm optimal toll & HOT capacity design
 DEBUG = False
-RETRAIN = False
+RETRAIN = True
 
 ## Question: Current pricing scheme minimizes latency because parameters are calibrated from the same dataset?
 
 if DEBUG:
-    tau = 15 #4.735
-    rho = 3/4
+    tau = 4 #4.735
+    rho = 1/4
     sigma_o, sigma_toll, sigma_pool2, sigma_pool3, loss_arr, tau_not_too_large = solve_sigma(tau, rho, max_itr = 5000, eta = 1e-1, eps = 1e-9, min_eta = 1e-10, D = D)
     print(tau_not_too_large)
 
@@ -282,7 +291,7 @@ if DEBUG:
 else:
     rho_vals = [1/4, 2/4, 3/4]
     if RETRAIN:
-        df = grid_search(rho_vals = rho_vals, tau_lst = np.arange(0, 15, 0.1), save_to_file = True, D = D)
+        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = True, D = D)
     else:
         df = pd.read_csv("opt_3d_results.csv")
 
@@ -334,10 +343,9 @@ else:
     ## Compute Pareto Fronts
     compute_pareto_front(df, "Total Travel Time", "Average Traffic Time Per Traveler (Minutes)", "latency")
     compute_pareto_front(df, "Total Emission", "Average Emission Per Traveler (Minutes)", "emission")
-"""
 
 ### Pipeline for dynamic toll & HOT capacity design
-RETRAIN = False
+RETRAIN = True
 if RETRAIN:
     rho_vals = [1/4, 2/4, 3/4]
     hour_lst = []
