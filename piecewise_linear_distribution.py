@@ -9,9 +9,9 @@ from tqdm import tqdm
 
 ## Script Options
 DENSITY_RE_CALIBRATE = False
-SINGLE_HOUR_RETRAIN = False
+SINGLE_HOUR_RETRAIN = True
 TIME_DYNAMIC_RETRAIN = True
-N_CPU = 15
+N_CPU = 25
 
 ## Load Data
 df = pd.read_csv("data/df_meta.csv") #pd.read_csv("hourly_demand_20210401.csv")
@@ -29,7 +29,7 @@ CARPOOL3_CHUNKS = 2
 BETA_RANGE = (0, 2) #0.952
 GAMMA2_RANGE = (0, 15) #13.52
 GAMMA3_RANGE = (0, 5) #2.71
-INT_GRID = 50
+INT_GRID = 100
 
 ## Latency Parameters
 POWER = 4
@@ -461,7 +461,7 @@ if TIME_DYNAMIC_RETRAIN:
     max_revenue_tau_lst = []
     for t in tqdm(np.array(df_hourly_avg["Hour"].unique())):
         demand = df_hourly_avg[df_hourly_avg["Hour"] == t].iloc[0]["Demand"]
-        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.5), save_to_file = False, D = demand, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8, n_cpu = N_CPU)
+        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = False, D = demand, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8, n_cpu = N_CPU)
         for rho in rho_vals:
             df_tmp = df[df["HOT Capacity"] == rho]
             min_congestion = df_tmp["Total Travel Time"].min()
