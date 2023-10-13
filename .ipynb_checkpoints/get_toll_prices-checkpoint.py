@@ -4,6 +4,12 @@ import pandas as pd
 RELEVANT_ZONE = "3460 - Hesperian/238 NB"
 RELEVANT_STATIONS = [400488, 401561, 400611, 400928, 400284, 400041, 408133, 408135, 417665, 412637, 417666, 408134, 400685, 401003, 400898, 400275, 400939, 400180, 400529, 400990, 400515, 400252]
 
+def lcb(x):
+    return x.quantile(0.025)
+
+def ucb(x):
+    return x.quantile(0.975)
+
 ## Load toll price data
 df_all = None
 for fname in ["NB_012021-032021.csv", "NB_042021-062021.csv", "NB_072021-092021.csv", "NB_102021-122021.csv"]:
@@ -21,5 +27,7 @@ for fname in ["NB_012021-032021.csv", "NB_042021-062021.csv", "NB_072021-092021.
         df_all = df
     else:
         df_all = pd.concat([df_all, df], ignore_index = True)
-df_all = df_all[["Time", "Toll"]].groupby(["Time"]).mean().reset_index().sort_values("Time")
+df_all = df_all[["Time", "Toll"]].groupby(["Time"]).agg({"Toll": ["mean", lcb, ucb]}).reset_index().sort_values("Time")
+# df_all.columns = [x + "_" + y for x,y in zip(df_all.columns.get_level_values(0), df_all.columns.get_level_values(1))]
+df_all.columns = ["Time", "Toll", "Toll_lower", "Toll_upper"]
 df_all.to_csv("data/all_tolls.csv", index = False)

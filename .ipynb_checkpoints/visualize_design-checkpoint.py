@@ -40,18 +40,18 @@ def compute_pareto_front(df, colname, xlabel, fname):
         df_sub = df[(df["HOT Capacity"] == rho) & (df["pareto_sep"] == 1)]
         plt.scatter(df_sub[colname], df_sub["Total Revenue"], label = f"$\\rho = {rho}$")
         plt.plot(df_sub[colname], df_sub["Total Revenue"])
-#    plt.plot(df_pareto[colname], df_pareto["Total Revenue"], color = "black", alpha = 0.5, label = "Combined", linestyle = "--")
+    plt.plot(df_pareto[colname], df_pareto["Total Revenue"], color = "black", alpha = 0.5, label = "Combined", linestyle = "--")
     plt.xlabel(xlabel)
     plt.ylabel("Total Revenue Gathered From Tolls ($)")
     #plt.title("Pareto Front")
     plt.legend()
-    plt.savefig(f"pareto_{fname}_sep.png")
+    plt.savefig(f"pareto_{fname}_combo.png")
     plt.clf()
     plt.close()
 
-df = pd.read_csv("opt_3d_results.csv")
-lst = list(np.arange(0, 15, 0.1)[:])
-df = df[df["Toll Price"].isin(lst)]
+df_opt = pd.read_csv("opt_3d_results.csv")
+lst = list(np.arange(0, 15, 0.5)[:])
+df = df_opt[df_opt["Toll Price"].isin(lst)]
 rho_vals = [0.25, 0.5, 0.75]
 ## Visualize price curves
 for rho in rho_vals:
@@ -96,28 +96,34 @@ plt.clf()
 plt.close()
 
 ## Compute pareto front
+lst = list(np.arange(0, 15, 0.5)[:])
+df = df_opt[df_opt["Toll Price"].isin(lst)]
 compute_pareto_front(df, "Total Travel Time", "Average Traffic Time Per Traveler (Minutes)", "latency")
 compute_pareto_front(df, "Total Emission", "Average Emission Per Traveler (Minutes)", "emission")
 
 ## Visualize dynamic pricing
 df_dynamic = pd.read_csv("time_dynamic_design.csv")
 df_data = pd.read_csv("data/all_tolls.csv")
-df_data = df_data[["Time", "Toll"]]
+df_data = df_data[["Time", "Toll", "Toll_lower", "Toll_upper"]]
 df_data["Hour"] = df_data["Time"].apply(lambda x: int(x.split(":")[0]))
 df_all = df_dynamic.merge(df_data, on = "Hour")
 feat_lst = ["Min Congestion", "Min Emission", "Max Revenue"]
 rho = 0.25
 for feat in feat_lst:
-    time_lst = pd.to_datetime(df_all[df_all["Rho"] == rho]["Time"], format="%H:%M") # np.array(df_all["Hour"]) #
-    opt_toll = np.array(df_all[df_all["Rho"] == rho][f"{feat} Toll"]) #np.repeat(np.array(df_dynamic[df_dynamic["Rho"] == rho][f"{feat} Toll"]), 60 // TIME_FREQ)
-    curr_toll = df_all[df_all["Rho"] == rho]["Toll"]
+    df_tmp = df_all[df_all["Rho"] == rho]
+    time_lst = pd.to_datetime(df_tmp["Time"], format="%H:%M") # np.array(df_all["Hour"]) #
+    opt_toll = np.array(df_tmp[f"{feat} Toll"]) #np.repeat(np.array(df_dynamic[df_dynamic["Rho"] == rho][f"{feat} Toll"]), 60 // TIME_FREQ)
+    curr_toll = df_tmp["Toll"]
+    toll_lower = df_tmp["Toll_lower"]
+    toll_upper = df_tmp["Toll_upper"]
     plt.plot(time_lst, opt_toll, label = "Optimal Toll Price", color = "red")
     plt.scatter(time_lst, curr_toll, label = "Current Toll Price", color = "blue")
+    plt.fill_between(time_lst, toll_lower, toll_upper, color = "blue", alpha = 0.2)
     plt.gcf().axes[0].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
     plt.gcf().autofmt_xdate()
     plt.xlabel("Time of Day")
     plt.ylabel(f"Optimal Toll Price For {feat}")
-    plt.legend()
+    plt.legend(loc = "upper left")
     plt.savefig(f"DynamicDesign/{feat.lower().replace(' ', '_')}.png")
     plt.clf()
     plt.close()

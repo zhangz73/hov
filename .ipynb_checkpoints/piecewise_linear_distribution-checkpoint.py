@@ -10,7 +10,7 @@ from tqdm import tqdm
 ## Script Options
 DENSITY_RE_CALIBRATE = False
 SINGLE_HOUR_RETRAIN = True
-TIME_DYNAMIC_RETRAIN = True
+TIME_DYNAMIC_RETRAIN = False
 N_CPU = 25
 
 ## Load Data
@@ -297,6 +297,8 @@ def get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec
 #            sigma_target.data = (sigma_target.data + sigma_output.data) / 2
             itr += 1
 #    print(loss_opt)
+    if len(loss_arr) == 0:
+        loss_arr = [loss_opt]
     return sigma_opt.numpy(), loss_arr
 
 ## Optimal toll & capacity design
@@ -444,7 +446,7 @@ else:
 D = 5821
 rho_vals = [1/4, 2/4, 3/4]
 if SINGLE_HOUR_RETRAIN:
-    df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = True, D = D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8, n_cpu = N_CPU)
+    df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = True, D = D, max_itr = 5000, eta = 1e-1, eps = 1e-7, min_eta = 1e-5, n_cpu = N_CPU)
 else:
     df = pd.read_csv("opt_3d_results.csv")
 
@@ -461,7 +463,7 @@ if TIME_DYNAMIC_RETRAIN:
     max_revenue_tau_lst = []
     for t in tqdm(np.array(df_hourly_avg["Hour"].unique())):
         demand = df_hourly_avg[df_hourly_avg["Hour"] == t].iloc[0]["Demand"]
-        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = False, D = demand, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8, n_cpu = N_CPU)
+        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = False, D = demand, max_itr = 5000, eta = 1e-2, eps = 1e-7, min_eta = 1e-5, n_cpu = N_CPU)
         for rho in rho_vals:
             df_tmp = df[df["HOT Capacity"] == rho]
             min_congestion = df_tmp["Total Travel Time"].min()
