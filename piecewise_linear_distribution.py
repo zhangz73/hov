@@ -10,8 +10,8 @@ from tqdm import tqdm
 ## Script Options
 DENSITY_RE_CALIBRATE = False
 SINGLE_HOUR_RETRAIN = True
-TIME_DYNAMIC_RETRAIN = False
-N_CPU = 25
+TIME_DYNAMIC_RETRAIN = True
+N_CPU = 1
 
 ## Load Data
 df = pd.read_csv("data/df_meta.csv") #pd.read_csv("hourly_demand_20210401.csv")
@@ -29,7 +29,7 @@ CARPOOL3_CHUNKS = 2
 BETA_RANGE = (0, 2) #0.952
 GAMMA2_RANGE = (0, 15) #13.52
 GAMMA3_RANGE = (0, 5) #2.71
-INT_GRID = 100
+INT_GRID = 50
 
 ## Latency Parameters
 POWER = 4
@@ -58,14 +58,14 @@ def get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D):
     travel_time_hov = get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D)
     return sigma_o * travel_time_o + (sigma_toll + 1/2 * sigma_pool2 + 1/3 * sigma_pool3) * travel_time_hov
 
-def get_total_revenue(tau, sigma_toll, D):
-    return tau * sigma_toll * D
+def get_total_revenue(tau, sigma_toll, sigma_pool2, D):
+    return tau * (sigma_toll + 1/4 * sigma_pool2) * D
 
 ## Calibrate preference distribution
 def get_atomic_strategy_profile(beta, gamma2, gamma3, tau, latency_o, latency_hov, is_scalar = False):
     cost_o = beta * latency_o
     cost_toll = beta * latency_hov + tau
-    cost_pool2 = beta * latency_hov + 0.5 * tau + gamma2
+    cost_pool2 = beta * latency_hov + 0.25 * tau + gamma2
     cost_pool3 = beta * latency_hov + gamma2 + gamma3
     if is_scalar:
         cost_arr = torch.tensor([cost_o, cost_toll, cost_pool2, cost_pool3])
@@ -80,8 +80,8 @@ def get_atomic_strategy_profile(beta, gamma2, gamma3, tau, latency_o, latency_ho
 
 def get_cube_strategy_profile(beta_lo, beta_hi, gamma2_lo, gamma2_hi, gamma3_lo, gamma3_hi, tau, latency_o, latency_hov):
     c_delta = latency_o - latency_hov
-    ## Toll: beta * c_delta > tau, gamma2 > 0.5 tau, gamma2 + gamma3 > tau
-    if beta_hi < tau / c_delta or gamma2_hi < 0.5 * tau:
+    ## Toll: beta * c_delta > tau, gamma2 > 0.75 tau, gamma2 + gamma3 > tau
+    if beta_hi < tau / c_delta or gamma2_hi < 0.75 * tau:
         sigma_toll = 0
     else:
         beta_frac = (beta_hi - max(tau / c_delta, beta_lo)) / (beta_hi - beta_lo)
@@ -93,17 +93,17 @@ def get_cube_strategy_profile(beta_lo, beta_hi, gamma2_lo, gamma2_hi, gamma3_lo,
         gamma23_mat = torch.zeros((INT_GRID, INT_GRID))
         for i in range(INT_GRID):
             gamma2_val = gamma2_vec[i]
-            if gamma2_val >= 0.5 * tau:
+            if gamma2_val >= 0.75 * tau:
                 lo = torch.max(torch.tensor([tau - gamma2_val, gamma3_lo]))
                 gamma23_mat[i,:] += (gamma3_vec >= lo)
         gamma23_frac = torch.mean(gamma23_mat)
         sigma_toll = beta_frac * gamma23_frac
-    ## Pool2: beta * c_delta > 0.5 tau + gamma2, gamma2 < 0.5 tau, gamma3 > 0.5 tau
-    if gamma2_lo > 0.5 * tau or gamma3_hi < 0.5 * tau:
+    ## Pool2: beta * c_delta > 0.25 tau + gamma2, gamma2 < 0.75 tau, gamma3 > 0.25 tau
+    if gamma2_lo > 0.75 * tau or gamma3_hi < 0.25 * tau:
         sigma_pool2 = 0
     else:
-        gamma3_frac = (gamma3_hi - max(0.5 * tau, gamma3_lo)) / (gamma3_hi - gamma3_lo)
-        ### \int_{\gamma2_lo}^{min(0.5*tau, \gamma2_hi)} \int_{max(\beta_lo, (0.5*tau+\gamma_2)/c_delta)}^{\beta_hi}
+        gamma3_frac = (gamma3_hi - max(0.25 * tau, gamma3_lo)) / (gamma3_hi - gamma3_lo)
+        ### \int_{\gamma2_lo}^{min(0.75*tau, \gamma2_hi)} \int_{max(\beta_lo, (0.25*tau+\gamma_2)/c_delta)}^{\beta_hi}
         gamma2_vec = torch.from_numpy(np.linspace(gamma2_lo, gamma2_hi, INT_GRID + 1))
         beta_vec = torch.from_numpy(np.linspace(beta_lo, beta_hi, INT_GRID + 1))
         gamma2_vec = (gamma2_vec[1:] + gamma2_vec[:-1]) / 2
@@ -111,12 +111,12 @@ def get_cube_strategy_profile(beta_lo, beta_hi, gamma2_lo, gamma2_hi, gamma3_lo,
         gamma2beta_mat = torch.zeros((INT_GRID, INT_GRID))
         for i in range(INT_GRID):
             gamma2_val = gamma2_vec[i]
-            if gamma2_val <= 0.5 * tau:
-                lo = torch.max(torch.tensor([(0.5*tau+gamma2_val) / c_delta, beta_lo]))
+            if gamma2_val <= 0.75 * tau:
+                lo = torch.max(torch.tensor([(0.25*tau+gamma2_val) / c_delta, beta_lo]))
                 gamma2beta_mat[i,:] += (beta_vec >= lo)
         gamma2beta_frac = torch.mean(gamma2beta_mat)
         sigma_pool2 = gamma3_frac * gamma2beta_frac
-    ## Pool3: beta * c_delta > gamma2 + gamma3, gamma3 < 0.5 tau, gamma2 + gamma3 < tau
+    ## Pool3: beta * c_delta > gamma2 + gamma3, gamma3 < 0.25 tau, gamma2 + gamma3 < tau
     gamma2_vec = torch.from_numpy(np.linspace(gamma2_lo, gamma2_hi, INT_GRID + 1))
     gamma3_vec = torch.from_numpy(np.linspace(gamma3_lo, gamma3_hi, INT_GRID + 1))
     beta_vec = torch.from_numpy(np.linspace(beta_lo, beta_hi, INT_GRID + 1))
@@ -126,7 +126,7 @@ def get_cube_strategy_profile(beta_lo, beta_hi, gamma2_lo, gamma2_hi, gamma3_lo,
     gamma32beta_mat = torch.zeros((INT_GRID, INT_GRID, INT_GRID))
     for i in range(INT_GRID):
         gamma3_val = gamma3_vec[i]
-        if gamma3_val <= 0.5 * tau:
+        if gamma3_val <= 0.25 * tau:
             for j in range(INT_GRID):
                 gamma2_val = gamma2_vec[j]
                 if gamma2_val + gamma3_val <= tau:
@@ -358,7 +358,7 @@ def grid_search_single(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file =
             sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma[0], sigma[1], sigma[2], sigma[3]
             total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
             total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
-            total_revenue = get_total_revenue(tau, sigma_toll, D = D)
+            total_revenue = get_total_revenue(tau, sigma_toll, sigma_pool2, D = D)
             
             if len(loss_arr) == 0:
 #                print(tau, rho)
@@ -382,16 +382,19 @@ def grid_search_single(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file =
 
 def grid_search(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file = True, D = None, max_itr = 2000, eta = 1e-3, eps = 1e-3, min_eta = 1e-8, n_cpu = 1):
     batch_size = int(math.ceil(len(toll_lst) / n_cpu))
-    np.random.shuffle(toll_lst)
-    results = Parallel(n_jobs = n_cpu)(delayed(grid_search_single)(
-        rho_vals, toll_lst[(i * batch_size):min((i + 1) * batch_size, len(toll_lst))], save_to_file, D, max_itr, eta, eps, min_eta
-    ) for i in range(n_cpu))
-    df_all = None
-    for df in results:
-        if df_all is None:
-            df_all = df
-        else:
-            df_all = pd.concat([df_all, df], ignore_index = True)
+    if n_cpu > 1:
+        np.random.shuffle(toll_lst)
+        results = Parallel(n_jobs = n_cpu)(delayed(grid_search_single)(
+            rho_vals, toll_lst[(i * batch_size):min((i + 1) * batch_size, len(toll_lst))], save_to_file, D, max_itr, eta, eps, min_eta
+        ) for i in range(n_cpu))
+        df_all = None
+        for df in results:
+            if df_all is None:
+                df_all = df
+            else:
+                df_all = pd.concat([df_all, df], ignore_index = True)
+    else:
+        df_all = grid_search_single(rho_vals, toll_lst, save_to_file, D, max_itr, eta, eps, min_eta)
     df_all = df_all.sort_values(["Toll Price", "HOT Capacity"], ascending = True)
     if save_to_file:
         df_all.to_csv("opt_3d_results.csv", index = False)
@@ -427,26 +430,27 @@ else:
     gamma3_vec = preference_density_cubes[2,:]
     density_vec = preference_density_cubes[3,:]
 
-#tau = 0.0
-#rho = 0.5
-#D = 5515
-#
-##sigma, loss_arr = get_equilibrium_profile(preference_density, tau, rho, D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8)
-#sigma, loss_arr = get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec, tau, rho, D, max_itr = 2000, eta = 1e-1, eps = 1e-7, min_eta = 1e-8)
-#sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma[0], sigma[1], sigma[2], sigma[3]
-#total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
-#total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
-#total_revenue = get_total_revenue(tau, sigma_toll, D = D)
-#print(total_travel_time, total_emission, total_revenue)
-#print([round(x, 2) for x in sigma])
-#plt.plot(loss_arr)
-#plt.title(f"Final Loss = {loss_arr[-1]:.2e}")
-#plt.show()
+tau = 0.5
+rho = 0.25
+D = 5801
 
-D = 5821
+#sigma, loss_arr = get_equilibrium_profile(preference_density, tau, rho, D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8)
+sigma, loss_arr = get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec, tau, rho, D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-4)
+sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma[0], sigma[1], sigma[2], sigma[3]
+total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
+total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
+total_revenue = get_total_revenue(tau, sigma_toll, sigma_pool2, D = D)
+print(total_travel_time, total_emission, total_revenue)
+print([round(x, 2) for x in sigma])
+plt.plot(loss_arr)
+plt.title(f"Final Loss = {loss_arr[-1]:.2e}")
+plt.show()
+
+D = df_hourly_avg[df_hourly_avg["Hour"] == 17].iloc[0]["Demand"]
+print("Demand =", D)
 rho_vals = [1/4, 2/4, 3/4]
 if SINGLE_HOUR_RETRAIN:
-    df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = True, D = D, max_itr = 5000, eta = 1e-1, eps = 1e-7, min_eta = 1e-5, n_cpu = N_CPU)
+    df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.5), save_to_file = True, D = D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-3, n_cpu = N_CPU)
 else:
     df = pd.read_csv("opt_3d_results.csv")
 
@@ -463,7 +467,7 @@ if TIME_DYNAMIC_RETRAIN:
     max_revenue_tau_lst = []
     for t in tqdm(np.array(df_hourly_avg["Hour"].unique())):
         demand = df_hourly_avg[df_hourly_avg["Hour"] == t].iloc[0]["Demand"]
-        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.1), save_to_file = False, D = demand, max_itr = 5000, eta = 1e-2, eps = 1e-7, min_eta = 1e-5, n_cpu = N_CPU)
+        df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, 0.5), save_to_file = False, D = demand, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-4, n_cpu = N_CPU)
         for rho in rho_vals:
             df_tmp = df[df["HOT Capacity"] == rho]
             min_congestion = df_tmp["Total Travel Time"].min()
