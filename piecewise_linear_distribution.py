@@ -15,17 +15,38 @@ N_CPU = 1
 
 ## Load Data
 df = pd.read_csv("data/df_meta.csv") #pd.read_csv("hourly_demand_20210401.csv")
+df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
+df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
 df = df.dropna()
 TAU_LST = list(df["Avg_total_toll"]) #list(df["Toll"])
 LATENCY_O_LST = list(df["Ordinary Travel Time"])
 LATENCY_HOV_LST = list(df["HOV Travel Time"])
 FLOW_O_LST = list(df["Ordinary Flow"])
 FLOW_HOV_LST = list(df["HOV Flow"])
+df_pop["Sigma_2over1"] = df_pop["TwoPeople"] * 2 / df_pop["Single"]
+df_pop["Sigma_3over1"] = df_pop["ThreePlus"] * 3 / df_pop["Single"]
+df = df.merge(df_pop[["Date", "Sigma_2over1", "Sigma_3over1"]], on = "Date")
+df = df.sort_values("Date", ascending = True)
+SIGMA_2OVER1_LST = df["Sigma_2over1"]
+SIGMA_3OVER1_LST = df["Sigma_3over1"]
+NUM_DATES = len(df["Date"].unique())
+PROFILE_DATE_MAP = torch.zeros((NUM_DATES, df.shape[0]), dtype = torch.float64)
+SIGMA_2OVER1_TARGET = torch.zeros(NUM_DATES, dtype = torch.float64)
+SIGMA_3OVER1_TARGET = torch.zeros(NUM_DATES, dtype = torch.float64)
+date_lst = list(df.drop_duplicates("Date")["Date"])
+for i in range(len(date_lst)):
+    date = date_lst[i]
+    sigma_2over1 = df[df["Date"] == date].iloc[0]["Sigma_2over1"]
+    sigma_3over1 = df[df["Date"] == date].iloc[0]["Sigma_3over1"]
+    idx_lst = np.array(df[df["Date"] == date].index)
+    PROFILE_DATE_MAP[i, idx_lst] = 1
+    SIGMA_2OVER1_TARGET[i] = sigma_2over1
+    SIGMA_3OVER1_TARGET[i] = sigma_3over1
 
 ## Hyperparameters
-VOT_CHUNKS = 2
-CARPOOL2_CHUNKS = 3
-CARPOOL3_CHUNKS = 2
+VOT_CHUNKS = 4
+CARPOOL2_CHUNKS = 10
+CARPOOL3_CHUNKS = 10
 BETA_RANGE = (0, 2) #0.952
 GAMMA2_RANGE = (0, 15) #13.52
 GAMMA3_RANGE = (0, 5) #2.71
@@ -178,37 +199,51 @@ def calibrate_density(tau_lst, latency_o_lst, latency_hov_lst, flow_o_lst, flow_
     coef_mat[:,3] = 1/3 * flow_o_lst / flow_sum_lst
     ### Iterate
     f = torch.ones(profile_len, requires_grad = True)
-    loss_diff = 1
-    loss = 1
+    loss_diff = 100
+    loss = 100
     itr = 0
     loss_arr = []
+    loss_opt = 100
+    f_opt = f.detach().clone()
     while loss > eps and itr < max_itr and eta >= min_eta:
         entire_profiles = sigma_profile_lst.permute(0, 2, 1) * torch.abs(f) #*torch.arange(sigma_profile_lst.ndim - 1, -1, -1)
         entire_profiles_perm = entire_profiles.permute(0, 2, 1)
         entire_profiles_sum = torch.sum(entire_profiles_perm, axis = 1)
+        D_lst = (flow_o_lst + flow_hov_lst) / (entire_profiles_sum[:,0] + entire_profiles_sum[:,1] + 1/2 * entire_profiles_sum[:,2] + 1/3 * entire_profiles_sum[:,3])
+        sigma_1 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,1])
+        sigma_2 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,2])
+        sigma_3 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,3])
+        sigma_2over1 = sigma_2 / sigma_1
+        sigma_3over1 = sigma_3 / sigma_1
+        loss_sigma2over1 = torch.mean(torch.abs(sigma_2over1 - SIGMA_2OVER1_TARGET) ** 2)
+        loss_sigma3over1 = torch.mean(torch.abs(sigma_3over1 - SIGMA_3OVER1_TARGET) ** 2)
         loss = torch.mean(torch.abs(torch.sum(coef_mat * entire_profiles_sum, axis = 1)) ** 2)
+        loss += loss_sigma2over1 + loss_sigma3over1
         loss_arr.append(float(loss.data))
         rerun = False
+        if loss < loss_opt:
+            loss_opt = float(loss.data)
+            f_opt = f.detach().clone()
         if len(loss_arr) <= 1:
             loss_diff = 1
         else:
             loss_diff = abs(loss_arr[-1] - loss_arr[-2])
         if loss <= eps:
             break
-        if torch.isnan(loss) or itr >= max_itr - 1:
-            itr = 0
-            eta /= 10
-            loss_arr = []
-            f = torch.ones(profile_len, requires_grad = True)
-            rerun = True
-            loss = 1
-            loss_diff = 1
+#        if torch.isnan(loss) or itr >= max_itr - 1:
+#            itr = 0
+#            eta /= 10
+#            loss_arr = []
+#            f = torch.ones(profile_len, requires_grad = True)
+#            rerun = True
+#            loss = 1
+#            loss_diff = 1
         if not rerun:
             loss.backward()
             f.data = f.data - eta * f.grad
             f.grad.zero_()
             itr += 1
-    f = torch.abs(f) / torch.sum(torch.abs(f))
+    f = torch.abs(f_opt) / torch.sum(torch.abs(f_opt))
     entire_profiles = sigma_profile_lst.permute(0, 2, 1) * f
     entire_profiles_perm = entire_profiles.permute(0, 2, 1)
     entire_profiles_sum = torch.sum(entire_profiles_perm, axis = 1)
@@ -401,7 +436,7 @@ def grid_search(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file = True, 
     return df_all
 
 if DENSITY_RE_CALIBRATE:
-    preference_density, D_lst, loss_arr = calibrate_density(TAU_LST, LATENCY_O_LST, LATENCY_HOV_LST, FLOW_O_LST, FLOW_HOV_LST, max_itr = 20000, eta = 1e-1, eps = 1e-9, min_eta = 1e-8)
+    preference_density, D_lst, loss_arr = calibrate_density(TAU_LST, LATENCY_O_LST, LATENCY_HOV_LST, FLOW_O_LST, FLOW_HOV_LST, max_itr = 20000, eta = 1e-3, eps = 1e-9, min_eta = 1e-5)
     print([round(x, 3) for x in preference_density])
     plt.plot(loss_arr)
     plt.title(f"Final Loss = {loss_arr[-1]:.2e}")
@@ -429,6 +464,21 @@ else:
     gamma2_vec = preference_density_cubes[1,:]
     gamma3_vec = preference_density_cubes[2,:]
     density_vec = preference_density_cubes[3,:]
+
+with open("density/preference_description.txt", "w") as f:
+    beta_vec = np.linspace(BETA_RANGE[0], BETA_RANGE[1], VOT_CHUNKS + 1)
+    gamma2_vec = np.linspace(GAMMA2_RANGE[0], GAMMA2_RANGE[1], CARPOOL2_CHUNKS + 1)
+    gamma3_vec = np.linspace(GAMMA3_RANGE[0], GAMMA3_RANGE[1], CARPOOL3_CHUNKS + 1)
+    for beta_idx in range(VOT_CHUNKS):
+        for gamma2_idx in range(CARPOOL2_CHUNKS):
+            for gamma3_idx in range(CARPOOL3_CHUNKS):
+                idx = beta_idx * CARPOOL2_CHUNKS * CARPOOL3_CHUNKS + gamma2_idx * CARPOOL3_CHUNKS + gamma3_idx
+                density = preference_density[idx]
+                if density > 1e-3:
+                    msg = f"beta[{beta_vec[beta_idx]}, {beta_vec[beta_idx + 1]}], gamma2[{gamma2_vec[gamma2_idx]}, {gamma2_vec[gamma2_idx + 1]}], gamma3[{gamma3_vec[gamma3_idx]}, {gamma3_vec[gamma3_idx + 1]}]: {density}\n"
+                    f.write(msg)
+
+assert False
 
 tau = 0.5
 rho = 0.25
