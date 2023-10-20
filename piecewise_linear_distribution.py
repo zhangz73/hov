@@ -8,7 +8,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 ## Script Options
-DENSITY_RE_CALIBRATE = False
+DENSITY_RE_CALIBRATE = True
 SINGLE_HOUR_RETRAIN = True
 TIME_DYNAMIC_RETRAIN = True
 N_CPU = 1
@@ -45,8 +45,8 @@ for i in range(len(date_lst)):
 
 ## Hyperparameters
 VOT_CHUNKS = 4
-CARPOOL2_CHUNKS = 10
-CARPOOL3_CHUNKS = 10
+CARPOOL2_CHUNKS = 2
+CARPOOL3_CHUNKS = 2
 BETA_RANGE = (0, 2) #0.952
 GAMMA2_RANGE = (0, 15) #13.52
 GAMMA3_RANGE = (0, 5) #2.71
@@ -210,9 +210,10 @@ def calibrate_density(tau_lst, latency_o_lst, latency_hov_lst, flow_o_lst, flow_
         entire_profiles_perm = entire_profiles.permute(0, 2, 1)
         entire_profiles_sum = torch.sum(entire_profiles_perm, axis = 1)
         D_lst = (flow_o_lst + flow_hov_lst) / (entire_profiles_sum[:,0] + entire_profiles_sum[:,1] + 1/2 * entire_profiles_sum[:,2] + 1/3 * entire_profiles_sum[:,3])
-        sigma_1 = PROFILE_DATE_MAP @ (entire_profiles_sum[:,1])
-        sigma_2 = PROFILE_DATE_MAP @ (entire_profiles_sum[:,2])
-        sigma_3 = PROFILE_DATE_MAP @ (entire_profiles_sum[:,3])
+        D_sum = PROFILE_DATE_MAP @ D_lst
+        sigma_1 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,1]) / D_sum
+        sigma_2 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,2]) / D_sum
+        sigma_3 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,3]) / D_sum
         sigma_2over1 = sigma_2 / sigma_1
         sigma_3over1 = sigma_3 / sigma_1
         loss_sigma2over1 = torch.mean(torch.abs(sigma_2over1 - SIGMA_2OVER1_TARGET) ** 2)
