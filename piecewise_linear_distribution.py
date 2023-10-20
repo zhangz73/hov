@@ -210,9 +210,9 @@ def calibrate_density(tau_lst, latency_o_lst, latency_hov_lst, flow_o_lst, flow_
         entire_profiles_perm = entire_profiles.permute(0, 2, 1)
         entire_profiles_sum = torch.sum(entire_profiles_perm, axis = 1)
         D_lst = (flow_o_lst + flow_hov_lst) / (entire_profiles_sum[:,0] + entire_profiles_sum[:,1] + 1/2 * entire_profiles_sum[:,2] + 1/3 * entire_profiles_sum[:,3])
-        sigma_1 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,1])
-        sigma_2 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,2])
-        sigma_3 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,3])
+        sigma_1 = PROFILE_DATE_MAP @ (entire_profiles_sum[:,1])
+        sigma_2 = PROFILE_DATE_MAP @ (entire_profiles_sum[:,2])
+        sigma_3 = PROFILE_DATE_MAP @ (entire_profiles_sum[:,3])
         sigma_2over1 = sigma_2 / sigma_1
         sigma_3over1 = sigma_3 / sigma_1
         loss_sigma2over1 = torch.mean(torch.abs(sigma_2over1 - SIGMA_2OVER1_TARGET) ** 2)
@@ -230,14 +230,14 @@ def calibrate_density(tau_lst, latency_o_lst, latency_hov_lst, flow_o_lst, flow_
             loss_diff = abs(loss_arr[-1] - loss_arr[-2])
         if loss <= eps:
             break
-#        if torch.isnan(loss) or itr >= max_itr - 1:
-#            itr = 0
-#            eta /= 10
-#            loss_arr = []
-#            f = torch.ones(profile_len, requires_grad = True)
-#            rerun = True
-#            loss = 1
-#            loss_diff = 1
+        if torch.isnan(loss) or itr >= max_itr - 1:
+            itr = 0
+            eta /= 10
+            loss_arr = []
+            f = torch.ones(profile_len, requires_grad = True)
+            rerun = True
+            loss = 1
+            loss_diff = 1
         if not rerun:
             loss.backward()
             f.data = f.data - eta * f.grad
@@ -440,7 +440,9 @@ if DENSITY_RE_CALIBRATE:
     print([round(x, 3) for x in preference_density])
     plt.plot(loss_arr)
     plt.title(f"Final Loss = {loss_arr[-1]:.2e}")
-    plt.show()
+    plt.savefig("density/preference_loss.png")
+    plt.clf()
+    plt.close()
     
     df["Demand"] = D_lst
     df.to_csv("data/df_meta_w_demand.csv", index = False)
@@ -478,23 +480,21 @@ with open("density/preference_description.txt", "w") as f:
                     msg = f"beta[{beta_vec[beta_idx]}, {beta_vec[beta_idx + 1]}], gamma2[{gamma2_vec[gamma2_idx]}, {gamma2_vec[gamma2_idx + 1]}], gamma3[{gamma3_vec[gamma3_idx]}, {gamma3_vec[gamma3_idx + 1]}]: {density}\n"
                     f.write(msg)
 
-assert False
-
-tau = 0.5
-rho = 0.25
-D = 5801
-
-#sigma, loss_arr = get_equilibrium_profile(preference_density, tau, rho, D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8)
-sigma, loss_arr = get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec, tau, rho, D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-4)
-sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma[0], sigma[1], sigma[2], sigma[3]
-total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
-total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
-total_revenue = get_total_revenue(tau, sigma_toll, sigma_pool2, D = D)
-print(total_travel_time, total_emission, total_revenue)
-print([round(x, 2) for x in sigma])
-plt.plot(loss_arr)
-plt.title(f"Final Loss = {loss_arr[-1]:.2e}")
-plt.show()
+#tau = 0.5
+#rho = 0.25
+#D = 5801
+#
+##sigma, loss_arr = get_equilibrium_profile(preference_density, tau, rho, D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-8)
+#sigma, loss_arr = get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec, tau, rho, D, max_itr = 2000, eta = 1e-2, eps = 1e-7, min_eta = 1e-4)
+#sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma[0], sigma[1], sigma[2], sigma[3]
+#total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
+#total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
+#total_revenue = get_total_revenue(tau, sigma_toll, sigma_pool2, D = D)
+#print(total_travel_time, total_emission, total_revenue)
+#print([round(x, 2) for x in sigma])
+#plt.plot(loss_arr)
+#plt.title(f"Final Loss = {loss_arr[-1]:.2e}")
+#plt.show()
 
 D = df_hourly_avg[df_hourly_avg["Hour"] == 17].iloc[0]["Demand"]
 print("Demand =", D)
