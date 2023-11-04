@@ -51,8 +51,10 @@ def compute_pareto_front(df, colname, xlabel, fname):
     plt.clf()
     plt.close()
 
+GRANULARITY = 0.5
+
 df_opt = pd.read_csv("opt_3d_results.csv")
-lst = list(np.arange(0, 15, 0.5)[:])
+lst = list(np.arange(0, 15, GRANULARITY)[:])
 df = df_opt[df_opt["Toll Price"].isin(lst)]
 rho_vals = [0.25, 0.5, 0.75]
 ## Visualize price curves
@@ -98,7 +100,7 @@ plt.clf()
 plt.close()
 
 ## Compute pareto front
-lst = list(np.arange(0, 15, 0.5)[:])
+lst = list(np.arange(0, 15, GRANULARITY)[:])
 df = df_opt[df_opt["Toll Price"].isin(lst)]
 compute_pareto_front(df, "Total Travel Time", "Average Traffic Time Per Traveler (Minutes)", "latency")
 compute_pareto_front(df, "Total Emission", "Average Emission Per Traveler (Minutes)", "emission")

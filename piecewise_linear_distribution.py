@@ -52,11 +52,11 @@ for i in range(len(date_lst)):
 
 ## Hyperparameters
 VOT_CHUNKS = 2
-CARPOOL2_CHUNKS = 5 #10
-CARPOOL3_CHUNKS = 4 #10
+CARPOOL2_CHUNKS = 4 #10
+CARPOOL3_CHUNKS = 2 #10
 BETA_RANGE = (0, 1) #0.952
-GAMMA2_RANGE = (0, 5) #13.52
-GAMMA3_RANGE = (0, 4) #2.71
+GAMMA2_RANGE = (0, 4) #13.52
+GAMMA3_RANGE = (0, 2) #2.71
 INT_GRID = 50
 
 ## Matches to earlier days closer but shoots up to $14 in the afternoon
