@@ -18,7 +18,7 @@ df = pd.read_csv("data/df_meta.csv") #pd.read_csv("hourly_demand_20210401.csv")
 df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
 df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
 df = df.dropna()
-# df = df[(df["Date"] >= "2021-04-01") & (df["Date"] <= "2021-06-30")]
+df = df[(df["Date"] >= "2021-03-01") & (df["Date"] <= "2021-08-31")]
 ## Cap speed at 65 mph/hr (i.e. at least 6.61 mins)
 # df["Ordinary Travel Time"] = df["Ordinary Travel Time"].apply(lambda x: max(x, 6.61))
 # df["HOV Travel Time"] = df["HOV Travel Time"].apply(lambda x: max(x, 6.61))
@@ -29,6 +29,7 @@ df_pop["Sigma_3ratio"] = df_pop["ThreePlus"] * 3 / (df_pop["Single"] + df_pop["T
 df = df.merge(df_pop[["Date", "Sigma_2ratio", "Sigma_3ratio"]], on = "Date")
 df = df.sort_values("Date", ascending = True)
 TAU_LST = list(df["Avg_total_toll"]) #list(df["Toll"])
+HOUR_LST = list(df["Hour"])
 LATENCY_O_LST = list(df["Ordinary Travel Time"])
 LATENCY_HOV_LST = list(df["HOV Travel Time"])
 FLOW_O_LST = list(df["Ordinary Flow"])
@@ -50,12 +51,12 @@ for i in range(len(date_lst)):
     SIGMA_3RATIO_TARGET[i] = sigma_3ratio
 
 ## Hyperparameters
-VOT_CHUNKS = 4
-CARPOOL2_CHUNKS = 2 #10
-CARPOOL3_CHUNKS = 3 #10
-BETA_RANGE = (0, 2) #0.952
-GAMMA2_RANGE = (0, 4) #13.52
-GAMMA3_RANGE = (0, 9) #2.71
+VOT_CHUNKS = 2
+CARPOOL2_CHUNKS = 10 #10
+CARPOOL3_CHUNKS = 5 #10
+BETA_RANGE = (0, 1) #0.952
+GAMMA2_RANGE = (0, 10) #13.52
+GAMMA3_RANGE = (0, 5) #2.71
 INT_GRID = 50
 
 ## Matches to earlier days closer but shoots up to $14 in the afternoon
@@ -93,6 +94,15 @@ def get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D):
     travel_time_o = get_travel_time_ordinary(rho, sigma_o, D)
     travel_time_hov = get_travel_time_hov(rho, sigma_toll, sigma_pool2, sigma_pool3, D)
     return sigma_o * travel_time_o + (sigma_toll + 1/2 * sigma_pool2 + 1/3 * sigma_pool3) * travel_time_hov
+
+def get_total_utility_cost(rho, tau, sigma_o_lst, sigma_toll_lst, sigma_pool2_lst, sigma_pool3_lst, D_lst, beta_lst, gamma2_lst, gamma3_lst, density_lst):
+    travel_time_o_lst = get_travel_time_ordinary(rho, np.sum(sigma_o_lst * density_lst), D_lst)
+    travel_time_hov_lst = get_travel_time_hov(rho, np.sum(sigma_toll_lst * density_lst), np.sum(sigma_pool2_lst * density_lst), np.sum(sigma_pool3_lst * density_lst), D_lst)
+    cost_o = np.sum(sigma_o_lst * density_lst * beta_lst * travel_time_o_lst)
+    cost_toll = np.sum(sigma_toll_lst * density_lst * (beta_lst * travel_time_hov_lst + tau))
+    cost_pool2 = np.sum(sigma_pool2_lst * density_lst * (beta_lst * travel_time_hov_lst + gamma2_lst + tau / 4))
+    cost_pool3 = np.sum(sigma_pool3_lst * density_lst * (beta_lst * travel_time_hov_lst + gamma2_lst + gamma3_lst))
+    return cost_o + cost_toll + cost_pool2 + cost_pool3
 
 def get_total_revenue(tau, sigma_toll, sigma_pool2, D):
     return tau * (sigma_toll + 1/4 * sigma_pool2) * D
@@ -280,7 +290,7 @@ def calibrate_density(tau_lst, latency_o_lst, latency_hov_lst, flow_o_lst, flow_
         loss_latency_o = torch.mean(torch.abs(latency_o - latency_o_lst) ** 2)
         loss_latency_hov = torch.mean(torch.abs(latency_hov - latency_hov_lst) ** 2)
         loss = torch.mean(torch.abs(torch.sum(coef_mat * entire_profiles_sum, axis = 1)) ** 2) #* torch.sum(torch.abs(f))
-        # loss += loss_sigma2ratio + loss_sigma3ratio #+ loss_latency_o + loss_latency_hov
+        loss += loss_sigma2ratio + loss_sigma3ratio #+ loss_latency_o + loss_latency_hov
         loss_arr.append(float(loss.data))
         rerun = False
         if loss < loss_opt:
@@ -358,7 +368,10 @@ def get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec
     density_vec = torch.from_numpy(density_vec)
     
     if tau == 0:
-        return np.array([1 - rho, rho, 0, 0]), [0.]
+        sigma_output_vec = np.zeros((len(beta_vec), 4))
+        sigma_output_vec[:,0] = 1 - rho
+        sigma_output_vec[:,1] = rho
+        return np.array([1 - rho, rho, 0, 0]), [0.], sigma_output_vec
     
     sigma_target_init = [0.25, 0.25, 0.25, 0.25]
     sigma_target = torch.tensor(sigma_target_init, requires_grad = True)
@@ -367,6 +380,7 @@ def get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec
     itr = 0
     loss_arr = []
     sigma_opt = sigma_target.clone().detach()
+    sigma_opt_vec = None
     loss_opt = 1
     while loss > eps and itr < max_itr and eta >= min_eta:
         latency_o = get_travel_time_ordinary(rho, sigma_target[0], D)
@@ -378,6 +392,7 @@ def get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec
         if loss < loss_opt:
             loss_opt = float(loss.data)
             sigma_opt = sigma_target.clone().detach()
+            sigma_opt_vec = sigma_output_vec.T.clone().detach()
         rerun = False
         if loss <= eps:
             break
@@ -397,7 +412,7 @@ def get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec
 #    print(loss_opt)
     if len(loss_arr) == 0:
         loss_arr = [loss_opt]
-    return sigma_opt.numpy(), loss_arr
+    return sigma_opt.numpy(), loss_arr, sigma_opt_vec.numpy()
 
 ## Optimal toll & capacity design
 def get_equilibrium_profile(preference_density, tau, rho, D, max_itr = 100, eta = 0.1, eps = 1e-7, min_eta = 1e-8):
@@ -442,6 +457,7 @@ def grid_search_single(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file =
     total_travel_time_lst = []
     total_emission_lst = []
     total_revenue_lst = []
+    total_utility_cost_lst = []
     loss_lst = []
     tau_lst = []
     rho_lst = []
@@ -452,11 +468,12 @@ def grid_search_single(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file =
     for tau in tqdm(toll_lst):
         for rho in rho_vals:
 #            sigma, loss_arr = get_equilibrium_profile(preference_density, tau, rho, D, max_itr = max_itr, eta = eta, eps = eps, min_eta = min_eta)
-            sigma, loss_arr = get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec, tau, rho, D, max_itr = max_itr, eta = eta, eps = eps, min_eta = min_eta)
+            sigma, loss_arr, sigma_output_vec = get_equilibrium_profile_atomic(beta_vec, gamma2_vec, gamma3_vec, density_vec, tau, rho, D, max_itr = max_itr, eta = eta, eps = eps, min_eta = min_eta)
             sigma_o, sigma_toll, sigma_pool2, sigma_pool3 = sigma[0], sigma[1], sigma[2], sigma[3]
             total_travel_time = get_total_travel_time(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
             total_emission = get_total_emission(rho, sigma_o, sigma_toll, sigma_pool2, sigma_pool3, D = D)
             total_revenue = get_total_revenue(tau, sigma_toll, sigma_pool2, D = D)
+            total_utility_cost = get_total_utility_cost(rho, tau, sigma_output_vec[:,0], sigma_output_vec[:,1], sigma_output_vec[:,2], sigma_output_vec[:,3], D, beta_vec, gamma2_vec, gamma3_vec, density_vec)
             
             if len(loss_arr) == 0:
 #                print(tau, rho)
@@ -465,6 +482,7 @@ def grid_search_single(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file =
             total_travel_time_lst.append(total_travel_time)
             total_emission_lst.append(total_emission)
             total_revenue_lst.append(total_revenue)
+            total_utility_cost_lst.append(total_utility_cost)
             loss_lst.append(loss_arr[-1])
             tau_lst.append(tau)
             rho_lst.append(rho)
@@ -473,7 +491,7 @@ def grid_search_single(rho_vals = [1/4, 2/4, 3/4], toll_lst = [], save_to_file =
             sigma_pool2_lst.append(sigma_pool2)
             sigma_pool3_lst.append(sigma_pool3)
 
-    df = pd.DataFrame.from_dict({"% Ordinary": sigma_o_lst, "% Toll": sigma_toll_lst, "% Pool 2": sigma_pool2_lst, "% Pool 3": sigma_pool3_lst, "Total Travel Time": total_travel_time_lst, "Total Emission": total_emission_lst, "Total Revenue": total_revenue_lst, "Loss": loss_lst, "Toll Price": tau_lst, "HOT Capacity": rho_lst})
+    df = pd.DataFrame.from_dict({"% Ordinary": sigma_o_lst, "% Toll": sigma_toll_lst, "% Pool 2": sigma_pool2_lst, "% Pool 3": sigma_pool3_lst, "Total Travel Time": total_travel_time_lst, "Total Emission": total_emission_lst, "Total Revenue": total_revenue_lst, "Total Utility Cost": total_utility_cost_lst, "Loss": loss_lst, "Toll Price": tau_lst, "HOT Capacity": rho_lst})
 #    if save_to_file:
 #        df.to_csv("opt_3d_results.csv", index = False)
     return df
@@ -532,7 +550,17 @@ if DENSITY_RE_CALIBRATE:
     df["Sigma_toll"] = entire_profiles_sum[:,1]
     df["Sigma_pool2"] = entire_profiles_sum[:,2]
     df["Sigma_pool3"] = entire_profiles_sum[:,3]
+    flow_2 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,2])
+    flow_3 = PROFILE_DATE_MAP @ (D_lst * entire_profiles_sum[:,3])
+    hov_sum = PROFILE_DATE_MAP @ (D_lst * (entire_profiles_sum[:,1] + entire_profiles_sum[:,2] + entire_profiles_sum[:,3]))
+    sigma_2ratio = flow_2 / hov_sum
+    sigma_3ratio = flow_3 / hov_sum
+    df_date = df[["Date"]].drop_duplicates()
+    df_date["sigma_2ratio_equi"] = sigma_2ratio
+    df_date["sigma_3ratio_equi"] = sigma_3ratio
+    df_date = df_date.merge(df_pop[["Date", "Sigma_2ratio", "Sigma_3ratio"]], on = "Date")
     df.to_csv("data/df_meta_w_demand.csv", index = False)
+    df_date.to_csv("data/df_date_profile.csv", index = False)
 
     df_hourly_avg = df[["Hour", "HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll", "Demand"]].groupby("Hour").mean().reset_index()
     df_hourly_avg.columns = ["Hour", "HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Toll", "Demand"]

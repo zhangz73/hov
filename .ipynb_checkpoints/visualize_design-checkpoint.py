@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
+PRICE_CAP = 10
+
 def compute_pareto_front(df, colname, xlabel, fname):
     df = df.sort_values("Total Revenue", ascending = True).copy()
     pareto = []
@@ -108,6 +110,9 @@ df_data = df_data[["Time", "Toll", "Toll_lower", "Toll_upper"]]
 df_data["Hour"] = df_data["Time"].apply(lambda x: int(x.split(":")[0]))
 df_all = df_dynamic.merge(df_data, on = "Hour")
 feat_lst = ["Min Congestion", "Min Emission", "Max Revenue"]
+if PRICE_CAP is not None:
+    for feat in feat_lst:
+        df_all[f"{feat} Toll"] = df_all[f"{feat} Toll"].apply(lambda x: min(x, PRICE_CAP))
 rho = 0.25
 for feat in feat_lst:
     df_tmp = df_all[df_all["Rho"] == rho]
