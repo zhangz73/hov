@@ -99,11 +99,26 @@ plt.savefig("3d_revenue_vs_toll.png")
 plt.clf()
 plt.close()
 
+for rho in rho_vals:
+    plt.plot(df[df["HOT Capacity"] == rho]["Toll Price"], df[df["HOT Capacity"] == rho]["Total Utility Cost"], label = f"$\\rho = {rho}$")
+    df_tmp = df[df["HOT Capacity"] == rho]
+    utility_cost_lst = np.array(df_tmp["Total Utility Cost"])
+    toll_lst = np.array(df_tmp["Toll Price"])
+    print(f"rho = {rho}", "Max Revenue At: tau =", toll_lst[np.argmin(revenue_lst)], "Max Revenue =", np.min(utility_cost_lst))
+plt.xlabel("Toll Price ($)")
+plt.ylabel("Total Utility Cost Gathered From Tolls ($)")
+#plt.title(f"Max Revenue Achieved At: tau = {tau_lst[np.argmax(total_revenue_lst)]}")
+plt.legend()
+plt.savefig("3d_utility_vs_toll.png")
+plt.clf()
+plt.close()
+
 ## Compute pareto front
 lst = list(np.arange(0, 15, GRANULARITY)[:])
 df = df_opt[df_opt["Toll Price"].isin(lst)]
 compute_pareto_front(df, "Total Travel Time", "Average Traffic Time Per Traveler (Minutes)", "latency")
 compute_pareto_front(df, "Total Emission", "Average Emission Per Traveler (Minutes)", "emission")
+compute_pareto_front(df, "Total Utility Cost", "Average Utility Cost Per Traveler (Minutes)", "utility")
 
 ## Visualize dynamic pricing
 df_dynamic = pd.read_csv("time_dynamic_design.csv")
@@ -111,7 +126,7 @@ df_data = pd.read_csv("data/all_tolls.csv")
 df_data = df_data[["Time", "Toll", "Toll_lower", "Toll_upper"]]
 df_data["Hour"] = df_data["Time"].apply(lambda x: int(x.split(":")[0]))
 df_all = df_dynamic.merge(df_data, on = "Hour")
-feat_lst = ["Min Congestion", "Min Emission", "Max Revenue"]
+feat_lst = ["Min Congestion", "Min Emission", "Max Revenue", "Min Utility"]
 if PRICE_CAP is not None:
     for feat in feat_lst:
         df_all[f"{feat} Toll"] = df_all[f"{feat} Toll"].apply(lambda x: min(x, PRICE_CAP))

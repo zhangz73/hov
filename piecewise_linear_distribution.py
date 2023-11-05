@@ -621,17 +621,26 @@ if TIME_DYNAMIC_RETRAIN:
     min_emission_tau_lst = []
     max_revenue_lst = []
     max_revenue_tau_lst = []
+    min_utility_cost_lst = []
+    min_utility_cost_tau_lst = []
+    df_dynamic_results = None
     for t in tqdm(np.array(df_hourly_avg["Hour"].unique())):
         demand = df_hourly_avg[df_hourly_avg["Hour"] == t].iloc[0]["Demand"]
         df = grid_search(rho_vals = rho_vals, toll_lst = np.arange(0, 15, GRANULARITY), save_to_file = False, D = demand, max_itr = 5000, eta = 1e-1, eps = 1e-7, min_eta = 1e-4, n_cpu = N_CPU)
+        if df_dynamic_results is None:
+            df_dynamic_results = df
+        else:
+            df_dynamic_results = pd.concat([df_dynamic_results, df], ignore_index = True)
         for rho in rho_vals:
             df_tmp = df[df["HOT Capacity"] == rho]
             min_congestion = df_tmp["Total Travel Time"].min()
             min_congestion_tau = df_tmp.iloc[df_tmp["Total Travel Time"].argmin()]["Toll Price"]
             min_emission = df_tmp["Total Emission"].min()
             min_emission_tau = df_tmp.iloc[df_tmp["Total Emission"].argmin()]["Toll Price"]
-            max_revenue = df_tmp["Total Revenue"].min()
+            max_revenue = df_tmp["Total Revenue"].max()
             max_revenue_tau = df_tmp.iloc[df_tmp["Total Revenue"].argmax()]["Toll Price"]
+            min_utility_cost = df_tmp["Total Utility Cost"].min()
+            min_utility_cost_tau = df_tmp.iloc[df_tmp["Total Utility Cost"].argmin()]["Toll Price"]
             hour_lst.append(t)
             rho_lst.append(rho)
             min_congestion_lst.append(min_congestion)
@@ -640,8 +649,11 @@ if TIME_DYNAMIC_RETRAIN:
             min_emission_tau_lst.append(min_emission_tau)
             max_revenue_lst.append(max_revenue)
             max_revenue_tau_lst.append(max_revenue_tau)
+            min_utility_cost_lst.append(min_utility_cost)
+            min_utility_cost_tau_lst.append(min_utility_cost_tau)
 
-    df_dynamic = pd.DataFrame.from_dict({"Hour": hour_lst, "Rho": rho_lst, "Min Congestion": min_congestion_lst, "Min Congestion Toll": min_congestion_tau_lst, "Min Emission": min_emission_lst, "Min Emission Toll": min_emission_tau_lst, "Max Revenue": max_revenue_lst, "Max Revenue Toll": max_revenue_tau_lst})
+    df_dynamic_results.to_csv("time_dynamic_results.csv", index = False)
+    df_dynamic = pd.DataFrame.from_dict({"Hour": hour_lst, "Rho": rho_lst, "Min Congestion": min_congestion_lst, "Min Congestion Toll": min_congestion_tau_lst, "Min Emission": min_emission_lst, "Min Emission Toll": min_emission_tau_lst, "Max Revenue": max_revenue_lst, "Max Revenue Toll": max_revenue_tau_lst, "Min Utility Cost": min_utility_cost_lst, "Min Utility Cost Toll": min_utility_cost_tau_lst})
     df_dynamic.to_csv("time_dynamic_design.csv", index = False)
 else:
     df_dynamic = pd.read_csv("time_dynamic_design.csv")
