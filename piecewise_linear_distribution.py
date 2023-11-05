@@ -8,8 +8,8 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 ## Script Options
-DENSITY_RE_CALIBRATE = True
-SINGLE_HOUR_RETRAIN = True
+DENSITY_RE_CALIBRATE = False
+SINGLE_HOUR_RETRAIN = False
 TIME_DYNAMIC_RETRAIN = True
 N_CPU = 25
 
@@ -600,7 +600,7 @@ else:
 
 # assert False
 
-GRANULARITY = 0.5
+GRANULARITY = 0.1
 
 D = df_hourly_avg[df_hourly_avg["Hour"] == 17].iloc[0]["Demand"]
 print("Demand =", D)
