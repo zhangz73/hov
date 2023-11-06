@@ -104,7 +104,7 @@ for rho in rho_vals:
     df_tmp = df[df["HOT Capacity"] == rho]
     utility_cost_lst = np.array(df_tmp["Total Utility Cost"])
     toll_lst = np.array(df_tmp["Toll Price"])
-    print(f"rho = {rho}", "Max Revenue At: tau =", toll_lst[np.argmin(revenue_lst)], "Max Revenue =", np.min(utility_cost_lst))
+    print(f"rho = {rho}", "Min Utility Cost At: tau =", toll_lst[np.argmin(utility_cost_lst)], "Min Utility Cost =", np.min(utility_cost_lst))
 plt.xlabel("Toll Price ($)")
 plt.ylabel("Total Utility Cost Gathered From Tolls ($)")
 #plt.title(f"Max Revenue Achieved At: tau = {tau_lst[np.argmax(total_revenue_lst)]}")
@@ -126,7 +126,7 @@ df_data = pd.read_csv("data/all_tolls.csv")
 df_data = df_data[["Time", "Toll", "Toll_lower", "Toll_upper"]]
 df_data["Hour"] = df_data["Time"].apply(lambda x: int(x.split(":")[0]))
 df_all = df_dynamic.merge(df_data, on = "Hour")
-feat_lst = ["Min Congestion", "Min Emission", "Max Revenue", "Min Utility"]
+feat_lst = ["Min Congestion", "Min Emission", "Max Revenue", "Min Utility Cost"]
 if PRICE_CAP is not None:
     for feat in feat_lst:
         df_all[f"{feat} Toll"] = df_all[f"{feat} Toll"].apply(lambda x: min(x, PRICE_CAP))

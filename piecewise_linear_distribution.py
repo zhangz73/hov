@@ -652,7 +652,7 @@ if TIME_DYNAMIC_RETRAIN:
             min_utility_cost_lst.append(min_utility_cost)
             min_utility_cost_tau_lst.append(min_utility_cost_tau)
 
-    df_dynamic_results.to_csv("time_dynamic_results.csv", index = False)
+    df_dynamic_results.to_csv("time_dynamic_design_all.csv", index = False)
     df_dynamic = pd.DataFrame.from_dict({"Hour": hour_lst, "Rho": rho_lst, "Min Congestion": min_congestion_lst, "Min Congestion Toll": min_congestion_tau_lst, "Min Emission": min_emission_lst, "Min Emission Toll": min_emission_tau_lst, "Max Revenue": max_revenue_lst, "Max Revenue Toll": max_revenue_tau_lst, "Min Utility Cost": min_utility_cost_lst, "Min Utility Cost Toll": min_utility_cost_tau_lst})
     df_dynamic.to_csv("time_dynamic_design.csv", index = False)
 else:
