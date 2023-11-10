@@ -16,11 +16,17 @@ travel_time_lst = []
 emission_lst = []
 revenue_lst = []
 utility_cost_lst = []
+travel_time_value_lst = []
+emission_value_lst = []
+revenue_value_lst = []
+utility_cost_value_lst = []
 hour_lst = np.array(df_data["Hour"])
+demand_lst = []
 for t in hour_lst:
     df_tmp = df[(df["Hour"] == t)]
     toll = df_data[df_data["Hour"] == t].iloc[0]["Toll"]
-    nearest_row = df_tmp.iloc[(df_tmp['Toll Price']-toll).abs().argsort().iloc[0]]
+    demand = df_data[df_data["Hour"] == t].iloc[0]["Demand"]
+    nearest_row = df_tmp.iloc[(df_tmp["Toll Price"] - toll).abs().argsort().iloc[0]]
     curr_travel_time = nearest_row["Total Travel Time"]
     curr_emission = nearest_row["Total Emission"]
     curr_revenue = nearest_row["Total Revenue"]
@@ -29,39 +35,68 @@ for t in hour_lst:
     min_emission = df_tmp["Total Emission"].min()
     max_revenue = df_tmp["Total Revenue"].max()
     min_utility_cost = df_tmp["Total Utility Cost"].min()
+    demand_lst.append(demand)
     travel_time_lst.append((curr_travel_time - min_travel_time) / curr_travel_time * 100)
     emission_lst.append((curr_emission - min_emission) / curr_emission * 100)
     revenue_lst.append((max_revenue - curr_revenue) / curr_revenue * 100)
     utility_cost_lst.append((curr_utility_cost - min_utility_cost) / curr_utility_cost * 100)
+    travel_time_value_lst.append((curr_travel_time - min_travel_time) * demand)
+    emission_value_lst.append((curr_emission - min_emission) * demand)
+    revenue_value_lst.append((max_revenue - curr_revenue))
+    utility_cost_value_lst.append((curr_utility_cost - min_utility_cost) * demand)
 
-plt.bar(hour_lst, travel_time_lst)
-plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
+fig, ax = plt.subplots()
+ax2 = ax.twinx()
+ax.bar(hour_lst, travel_time_lst, color = "blue", alpha = 0.5)
+ax2.plot(hour_lst, travel_time_value_lst, color = "red", alpha = 0.5)
+ax2.scatter(hour_lst, travel_time_value_lst, color = "red", alpha = 0.5)
+ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter("{x:.0f} mins"))
 plt.xlabel("Hour")
 plt.title("Congestion Improvement")
+plt.tight_layout()
 plt.savefig("DynamicDesign/dynamic_congestion_improvement.png")
 plt.clf()
 plt.close()
 
-plt.bar(hour_lst, emission_lst)
-plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
+fig, ax = plt.subplots()
+ax2 = ax.twinx()
+ax.bar(hour_lst, emission_lst, color = "blue", alpha = 0.5)
+ax2.plot(hour_lst, emission_value_lst, color = "red", alpha = 0.5)
+ax2.scatter(hour_lst, emission_value_lst, color = "red", alpha = 0.5)
+ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter("{x:.0f} mins"))
 plt.xlabel("Hour")
 plt.title("Emission Improvement")
+plt.tight_layout()
 plt.savefig("DynamicDesign/dynamic_emission_improvement.png")
 plt.clf()
 plt.close()
 
-plt.bar(hour_lst, revenue_lst)
-plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
+fig, ax = plt.subplots()
+ax2 = ax.twinx()
+ax.bar(hour_lst, revenue_lst, color = "blue", alpha = 0.5)
+ax2.plot(hour_lst, revenue_value_lst, color = "red", alpha = 0.5)
+ax2.scatter(hour_lst, revenue_value_lst, color = "red", alpha = 0.5)
+ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter("${x:,.0f}"))
 plt.xlabel("Hour")
 plt.title("Revenue Improvement")
+plt.tight_layout()
 plt.savefig("DynamicDesign/dynamic_revenue_improvement.png")
 plt.clf()
 plt.close()
 
-plt.bar(hour_lst, utility_cost_lst)
-plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
+fig, ax = plt.subplots()
+ax2 = ax.twinx()
+ax.bar(hour_lst, utility_cost_lst, color = "blue", alpha = 0.5)
+ax2.plot(hour_lst, utility_cost_value_lst, color = "red", alpha = 0.5)
+ax2.scatter(hour_lst, utility_cost_value_lst, color = "red", alpha = 0.5)
+ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter("${x:,.0f}"))
 plt.xlabel("Hour")
 plt.title("Utility Cost Improvement")
+plt.tight_layout()
 plt.savefig("DynamicDesign/dynamic_utility_cost_improvement.png")
 plt.clf()
 plt.close()
