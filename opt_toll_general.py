@@ -14,8 +14,8 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 ## Script Options
-N_CPU = 2
-DENSITY_RECALIBRATE = True
+N_CPU = 1
+DENSITY_RECALIBRATE = False
 
 ## Hyperparameters
 NUM_LANES = 4
@@ -31,24 +31,30 @@ GAMMA_RANGE_DCT = {
     3: [(0, 1), (1, 2)]
 }
 C = 3
-S = 5
 BETA_RANGE = (BETA_RANGE_LST[0][0], BETA_RANGE_LST[-1][1])
 GAMMA_RANGE_C = [(GAMMA_RANGE_DCT[c][0][0], GAMMA_RANGE_DCT[c][-1][1]) for c in range(1, C + 1)]
-INT_GRID = 50
+INT_GRID = 10 #50
 
 ## Load Data
 ### Date, Hour, Segment, HOV Flow, Ordinary Flow, HOV Travel Time, Ordinary Travel Time, Avg_total_toll
 df = pd.read_csv("data/df_meta.csv") #pd.read_csv("hourly_demand_20210401.csv")
-df_wide = df.pivot(index = ["Date", "Hour"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
-df_wide.columns = [x + "_" + y for x,y in df_wide.columns]
-segment_lst = list([x.split("_")[1].strip() for x in df_wide.columns if "HOV Flow" in x])
-df_wide = df_wide.dropna()
-df_wide = df_wide.reset_index()
-
+# df = df[df["Segment"] == "3460 - Hesperian/238 NB"]
 df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
 df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
 df = df.dropna()
 df = df[(df["Date"] >= "2021-03-01") & (df["Date"] <= "2021-08-31")]
+
+df_wide = df.pivot(index = ["Date", "Hour"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
+df_wide.columns = [x + "_" + y for x,y in df_wide.columns]
+segment_lst = list([x.split("_")[1].strip() for x in df_wide.columns if "HOV Flow" in x])
+S = len(segment_lst)
+DISTANCE_ARR = np.zeros(S)
+for segment_idx in range(len(segment_lst)):
+    distance = df[df["Segment"] == segment_lst[segment_idx]].iloc[0]["Distance"]
+    DISTANCE_ARR[segment_idx] = distance
+df_wide = df_wide.dropna()
+df_wide = df_wide.reset_index()
+
 ## Cap speed at 65 mph/hr (i.e. at least 6.61 mins)
 # df["Ordinary Travel Time"] = df["Ordinary Travel Time"].apply(lambda x: max(x, 6.61))
 # df["HOV Travel Time"] = df["HOV Travel Time"].apply(lambda x: max(x, 6.61))
@@ -66,8 +72,8 @@ LATENCY_O_LST = np.zeros((N_DATA, S))
 LATENCY_HOV_LST = np.zeros((N_DATA, S))
 FLOW_O_LST = np.zeros(N_DATA * S)
 FLOW_HOV_LST = np.zeros(N_DATA * S)
-HOUR_LST = np.array(df["Hour"])
-N_HOUR = len(df["Hour"].unique())
+HOUR_LST = np.array(df_wide["Hour"])
+N_HOUR = len(df_wide["Hour"].unique())
 UNIQUE_HOUR_LST = np.array(df["Hour"].unique())
 ### TODO: Change it to multisegments later
 for segment_idx in range(len(segment_lst)):
@@ -104,8 +110,8 @@ for i in range(len(date_lst)):
         tmp.append(date)
 date_lst = tmp
 
-def get_cost(flow):
-    return ((BPR_A * flow) ** BPR_POWER + BPR_B) * DISTANCE
+def get_cost(flow, distance):
+    return ((BPR_A * flow) ** BPR_POWER + BPR_B) * distance
 
 def solve_sigma_given_parameters(beta, gamma_c, c_o, c_h, tau_cs):
     lane_cs = np.zeros((C, S))
@@ -139,16 +145,18 @@ def solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, c_o, c_h, tau_cs):
             total_cost_c_lst.append(total_cost_c)
             best_c_lst.append(best_c)
 #    best_c = np.argmin(total_cost_c, axis = 2)
-    lane_cs_ret = np.zeros((n_data, n_grids, segment_type_num, C, S))
+    lane_cs_h = np.zeros((n_data, n_grids, segment_type_num, C, S))
+    lane_cs_o = np.zeros((n_data, n_grids, segment_type_num, C, S))
     for data_idx in tqdm(range(n_data), leave = False):
         for grid_idx in tqdm(range(n_grids), leave = False):
             segment_idx = 0
             for s_o in range(S):
                 for s_d in range(s_o, S):
                     best_c = best_c_lst[segment_idx][data_idx, grid_idx]
-                    lane_cs_ret[data_idx,grid_idx, segment_idx, best_c,s_o:(s_d+1)] = lane_cs[data_idx,grid_idx,best_c,s_o:(s_d+1)]
+                    lane_cs_h[data_idx,grid_idx, segment_idx, best_c,s_o:(s_d+1)] = lane_cs[data_idx,grid_idx,best_c,s_o:(s_d+1)]
+                    lane_cs_o[data_idx,grid_idx, segment_idx, best_c,s_o:(s_d+1)] = 1 - lane_cs[data_idx,grid_idx,best_c,s_o:(s_d+1)]
                     segment_idx += 1
-    return lane_cs_ret #lane_cs[:,best_c,:]
+    return lane_cs_h, lane_cs_o #lane_cs[:,best_c,:]
 
 def elem_in_range(beta, gamma_c, lst):
     if beta > lst[0][1]:
@@ -218,11 +226,13 @@ def get_grid():
     return beta_lst, gamma_lst_c, d_idx_start_lst
 
 def profile_given_data_single(lo, hi, beta_lst, gamma_lst_c, segment_type_num):
-    sigma_ns = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+    sigma_ns_h = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+    sigma_ns_o = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
     for data_idx in tqdm(range(lo, hi)):
-        sigma_s = solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, LATENCY_O_LST[data_idx,:], LATENCY_HOV_LST[data_idx,:], TAU_CS_LST[data_idx,:,:])
-        sigma_ns[data_idx,:,:,:,:] = sigma_s[0,:,:,:,:]
-    return sigma_ns
+        sigma_s_h, sigma_s_o = solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, LATENCY_O_LST[data_idx,:], LATENCY_HOV_LST[data_idx,:], TAU_CS_LST[data_idx,:,:])
+        sigma_ns_h[data_idx,:,:,:,:] = sigma_s_h[0,:,:,:,:]
+        sigma_ns_o[data_idx,:,:,:,:] = sigma_s_o[0,:,:,:,:]
+    return sigma_ns_h, sigma_ns_o
 
 def calibrate_density():
     ## Get sigma profile for each grid
@@ -230,13 +240,15 @@ def calibrate_density():
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
     segment_type_num = int(S * (S + 1) / 2)
     ### Compute profile given data
-    sigma_ns = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+    sigma_ns_h = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+    sigma_ns_o = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
     batch_size = int(math.ceil(N_DATA / N_CPU))
     results = Parallel(n_jobs = N_CPU)(delayed(profile_given_data_single)(
         i * batch_size, min(N_DATA, (i + 1) * batch_size), beta_lst, gamma_lst_c, segment_type_num
     ) for i in range(N_CPU))
-    for res in results:
-        sigma_ns += res
+    for res in tqdm(results):
+        sigma_ns_h += res[0]
+        sigma_ns_o += res[1]
     ## Compute equilibrium flow using d
     model = gp.Model()
     single_t_d_len = len(d_idx_start_lst) - 1
@@ -261,10 +273,10 @@ def calibrate_density():
                 for s_d in range(s_o, S):
                     for s in range(s_o, s_d + 1):
                         for c in range(C):
-                            d_to_f_mat[relev_data_idx * S + s, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += 1 / (c + 1) * (1 - sigma_ns[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s]).sum(axis = 1) / elem_num / (s_d - s_o + 1) / C
-                            d_to_f_mat[N_DATA * S + relev_data_idx * S + s, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += 1 / (c + 1) * sigma_ns[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num / (s_d - s_o + 1) / C
-                            d_to_fh_mat[c * N_DATA + relev_data_idx, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += sigma_ns[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num / (s_d - s_o + 1) / C
-                            d_to_fh_total_mat[relev_data_idx, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += sigma_ns[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num / (s_d - s_o + 1) / C
+                            d_to_f_mat[relev_data_idx * S + s, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += 1 / (c + 1) * sigma_ns_o[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num #/ C #/ (s_d - s_o + 1)
+                            d_to_f_mat[N_DATA * S + relev_data_idx * S + s, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += 1 / (c + 1) * sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num #/ C #/ (s_d - s_o + 1)
+                            d_to_fh_mat[c * N_DATA + relev_data_idx, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num #/ C #/ (s_d - s_o + 1)
+                            d_to_fh_total_mat[relev_data_idx, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num #/ C #/ (s_d - s_o + 1)
                     segment_idx += 1
     model.addConstr(d_to_f_mat @ d == f_equi)
     model.addConstr(d_to_fh_mat @ d == f_h_equi)
@@ -314,19 +326,26 @@ def describe_density(density):
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
     beta_gamma_range_lst = get_beta_gamma_range_lst()
     segment_type_num = int(S * (S + 1) / 2)
+    segment_range_lst = []
+    segment_idx = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            name = f"{segment_lst[s_o]} to {segment_lst[s_d]}"
+            segment_range_lst.append(name)
+            segment_idx += 1
     single_t_d_len = len(d_idx_start_lst) - 1
     for hour_idx in range(N_HOUR):
         t = UNIQUE_HOUR_LST[hour_idx]
         print(f"Hour = {t}:")
         for segment_idx in range(segment_type_num):
-            print(f"\tSegment type = {segment_idx}:")
+            print(f"\tSegment type = {segment_range_lst[segment_idx]}:")
             for d_idx in range(single_t_d_len):
                 val = density[hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx]
                 tup = beta_gamma_range_lst[d_idx]
                 if val > 1e-3:
                     print(f"\t\tBeta = {tup[0]}, Gamma = {tup[1:]}: {val}")
 
-def get_opt_flow(density, hour_idx, rho, tau_cs, obj = "Min Congestion"):
+def get_opt_flow(density, hour_idx, rho, tau_cs, obj = "Min Congestion", eps = 1):
     assert obj in ["Min Congestion", "Min Emission", "Min Utility Cost", "Max Revenue"]
     ## Initialize
     ### Get grid
@@ -334,6 +353,7 @@ def get_opt_flow(density, hour_idx, rho, tau_cs, obj = "Min Congestion"):
     single_t_d_len = len(d_idx_start_lst) - 1
     segment_type_num = int(S * (S + 1) / 2)
     d_len = int(N_HOUR * single_t_d_len * segment_type_num)
+    n_grids = len(beta_lst)
     ### Initialize the model
     model = gp.Model()
     model.setParam("Presolve", 0)
@@ -389,7 +409,10 @@ def get_opt_flow(density, hour_idx, rho, tau_cs, obj = "Min Congestion"):
     for i in range(S * 2):
         model.addGenConstrPow(flow_per_lane[i], flow_power[i], BPR_POWER)
     latency = model.addMVar(S * 2, lb = 0, vtype = GRB.CONTINUOUS, name = "latency")
-    model.addConstr(latency == (flow_power + BPR_B) * DISTANCE)
+    distance_var = np.zeros(S * 2)
+    distance_var[::2] = DISTANCE_ARR
+    distance_var[1::2] = DISTANCE_ARR
+    model.addConstr(latency == (flow_power + BPR_B) * distance_var)
     ### Add constraints on sigma
 #    sigma_total_map = np.zeros((len(beta_lst) * segment_type_num, sigma_len))
     sigma_total_row_lst, sigma_total_col_lst, sigma_total_val_lst = [], [], []
@@ -430,6 +453,19 @@ def get_opt_flow(density, hour_idx, rho, tau_cs, obj = "Min Congestion"):
     u = model.addMVar(u_len, lb = 0, vtype = GRB.CONTINUOUS, name = "u")
     model.addConstr(sigma_conserv_map @ sigma == u)
     model.addConstr(sigma_zero_map * sigma == zero_vec)
+    ## Add constraints on the property of ordinary lanes
+    ###     - \sum_s f^o_1 >= \epsilon
+    ###     - \sum_s f^h_2 >= \epsilon
+    ###     - \sum_s f^o_3 == 0
+    ###     Recall that flow_len = S * C * 2
+    ### Currently only support C = 3
+#    assert C == 3
+#    flow_to_oh_property_map = np.zeros((C, flow_len))
+#    flow_to_oh_property_map[0, (0*2)::(C*2)] = 1
+#    flow_to_oh_property_map[1, (1*2+1)::(C*2)] = 1
+#    flow_to_oh_property_map[2, (2*2)::(C*2)] = 1
+#    model.addConstr(flow_to_oh_property_map[:2,:] @ flow >= eps)
+#    model.addConstr(flow_to_oh_property_map[2,:] @ flow == 0)
     ### Create objective
     if obj == "Min Utility Cost":
         objective = ((sigma_to_latency_coef_map @ sigma) * latency).sum() + (sigma_cost_coef * sigma).sum()
@@ -474,8 +510,8 @@ def get_toll_from_flow(flow, density, hour_idx, rho):
         flow_h[s] = flow[(s*C*2+1):((s+1)*C*2+1):2].sum()
     o_lanes = int(NUM_LANES * (1 - rho))
     h_lanes = NUM_LANES - o_lanes
-    cost_o = get_cost(flow_o / o_lanes)
-    cost_h = get_cost(flow_h / h_lanes)
+    cost_o = get_cost(flow_o / o_lanes, DISTANCE_ARR)
+    cost_h = get_cost(flow_h / h_lanes, DISTANCE_ARR)
     
     ## Solve primal LP to get objective value
     ## Solve dual LP to get the toll price
@@ -546,6 +582,13 @@ def describe_sigma(sigma, density, hour_idx):
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
     single_t_d_len = len(d_idx_start_lst) - 1
     segment_type_num = int(S * (S + 1) / 2)
+    segment_range_lst = []
+    segment_idx = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            name = f"{segment_lst[s_o]} to {segment_lst[s_d]}"
+            segment_range_lst.append(name)
+            segment_idx += 1
     # len(beta_lst) * segment_type_num * C * S * 2
     segment_type_num = int(S * (S + 1) / 2)
     d_vec = np.zeros((len(beta_lst), segment_type_num))
@@ -555,7 +598,7 @@ def describe_sigma(sigma, density, hour_idx):
             d_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx] = d_val
     d_total = d_vec.sum(axis = 0)
     for segment_idx in range(segment_type_num):
-        print(f"Segment {segment_idx}:")
+        print(f"Segment {segment_range_lst[segment_idx]}:")
         for s in range(S):
             for c in range(C):
                 sigma_o_idx = np.arange(segment_idx * C * S * 2 + c * S * 2 + s * 2, len(sigma), segment_type_num * C * S * 2)
@@ -564,17 +607,148 @@ def describe_sigma(sigma, density, hour_idx):
                 sigma_h_total = (sigma[sigma_o_idx + 1] * d_vec[:,segment_idx]).sum() / d_total[segment_idx]
                 print(f"\tS = {s}, C = {c + 1}: sigma_o = {sigma_o_total}, sigma_h = {sigma_h_total}")
 
+def get_flow_from_toll_iterative(density, tau_cs, rho = 0.25, hour_idx = 12, num_itr = 10, lam = 0.5):
+    ### Get grid
+    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
+    single_t_d_len = len(d_idx_start_lst) - 1
+    n_grids = len(beta_lst)
+    segment_type_num = int(S * (S + 1) / 2)
+    d_len = int(N_HOUR * single_t_d_len * segment_type_num)
+    ### Compute auxiliary matrices
+    segment_pop = np.zeros(segment_type_num)
+    for segment_type_idx in range(segment_type_num):
+        density_idx_begin = hour_idx * single_t_d_len * segment_type_num + segment_type_idx
+        density_idx_end = (hour_idx + 1) * single_t_d_len * segment_type_num
+        pop = density[density_idx_begin:density_idx_end:segment_type_num].sum()
+        segment_pop[segment_type_idx] = pop
+    segment_type_strategy_len = segment_type_num * C * S * 2
+    equi_profile_len = len(beta_lst) * segment_type_num * C * S * 2
+    segment_type_strategy_to_flow_o_map = np.zeros((S, segment_type_strategy_len))
+    segment_type_strategy_to_flow_h_map = np.zeros((S, segment_type_strategy_len))
+    equi_profile_to_strategy_density_vec = np.zeros((len(beta_lst), segment_type_strategy_len))
+    segment_len_lst = np.zeros(segment_type_num)
+    for c in range(C):
+        segment_type_idx = 0
+        for s_o in range(S):
+            for s_d in range(s_o, S):
+                col_idx_o_begin = segment_type_idx * C * S * 2 + c * S * 2 + s_o * 2
+                col_idx_o_end = segment_type_idx * C * S * 2 + c * S * 2 + (s_d + 1) * 2
+                col_idx_h_begin = col_idx_o_begin + 1
+                col_idx_h_end = col_idx_o_end + 1
+                segment_type_strategy_to_flow_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] = 1 / (c + 1) * segment_pop[segment_type_idx]
+                segment_type_strategy_to_flow_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] = 1 / (c + 1) * segment_pop[segment_type_idx]
+                segment_len_lst[segment_type_idx] = s_d + 1 - s_o
+                segment_type_idx += 1
+    segment_density_lst = np.zeros(segment_type_num)
+    ### Begin solving strategy profile iteratively
+    loss_arr = []
+    ### Guess a strategy profile
+    segment_type_strategy = np.zeros(segment_type_strategy_len)
+    ### TODO: Mask out infeasible S of each segment type
+    segment_type_idx = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            density_sum = density[(hour_idx * single_t_d_len * segment_type_num + segment_type_idx):((hour_idx + 1) * single_t_d_len * segment_type_num):segment_type_num].sum()
+            segment_density_lst[segment_type_idx] = density_sum
+            seg_start = segment_type_idx * C * S * 2
+            seg_end = (segment_type_idx + 1) * C * S * 2
+            for s in range(s_o, s_d + 1):
+                seg_start = segment_type_idx * C * S * 2
+                begin = seg_start + s * 2
+                end = seg_start + C * S * 2
+                seg_end = (segment_type_idx + 1) * C * S * 2
+                o_idx_lst = np.arange(begin, seg_end, S * 2)
+                h_idx_lst = o_idx_lst + 1
+                if segment_density_lst[segment_type_idx] > 1:
+                    segment_type_strategy[o_idx_lst] = 1 / (segment_len_lst[segment_type_idx] * C * 2)
+                    segment_type_strategy[h_idx_lst] = 1 / (segment_len_lst[segment_type_idx] * C * 2)
+                    if density_sum > 1:
+                        for d_idx in range(single_t_d_len):
+                            d_val = density[hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_type_idx]
+                            elem_num = d_idx_start_lst[d_idx + 1] - d_idx_start_lst[d_idx]
+                            equi_val = d_val / elem_num / density_sum / segment_len_lst[segment_type_idx]
+                            equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],o_idx_lst] = equi_val
+                            equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],h_idx_lst] = equi_val
+            segment_type_idx += 1
+#    print(equi_profile_to_strategy_density_vec.sum(), segment_type_strategy.sum())
+    o_lanes = int(NUM_LANES * (1 - rho))
+    h_lanes = NUM_LANES - o_lanes
+    for itr in tqdm(range(num_itr)):
+        ### Compute the corresponding latency
+        flow_o = segment_type_strategy_to_flow_o_map @ segment_type_strategy
+        flow_h = segment_type_strategy_to_flow_h_map @ segment_type_strategy
+        latency_o = get_cost(flow_o / o_lanes , DISTANCE_ARR)
+        latency_h = get_cost(flow_h / h_lanes, DISTANCE_ARR)
+        ### Solve the equilibrium profile
+        sigma_s_h, sigma_s_o = solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, latency_o, latency_h, tau_cs)
+        sigma_s = np.zeros((len(beta_lst), segment_type_strategy_len))
+        sigma_s[:,::2] = sigma_s_o.reshape((len(beta_lst), segment_type_strategy_len // 2))
+        sigma_s[:,1::2] = sigma_s_h.reshape((len(beta_lst), segment_type_strategy_len // 2))
+        equi_profile = (equi_profile_to_strategy_density_vec * sigma_s).sum(axis = 0)
+        ### Update the guess
+        loss = np.mean((segment_type_strategy - equi_profile) ** 2)
+        segment_type_strategy = segment_type_strategy * (1 - lam) + equi_profile * lam
+        loss_arr.append(loss)
+    print("Ordinary Flow:", flow_o)
+    print("HOT Flow:", flow_h)
+    print("Ordinary Travel Time:", latency_o)
+    print("HOT Travel Time:", latency_h)
+    return segment_type_strategy, loss_arr
+
+def describe_segment_type_strategy(sigma, density, hour_idx, eps = 1e-3):
+    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
+    single_t_d_len = len(d_idx_start_lst) - 1
+    segment_type_num = int(S * (S + 1) / 2)
+    segment_range_lst = []
+    segment_idx = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            name = f"{segment_lst[s_o]} to {segment_lst[s_d]}"
+            segment_range_lst.append(name)
+            segment_idx += 1
+    # len(beta_lst) * segment_type_num * C * S * 2
+    segment_type_num = int(S * (S + 1) / 2)
+    segment_pop = np.zeros(segment_type_num)
+    for segment_type_idx in range(segment_type_num):
+        density_idx_begin = hour_idx * single_t_d_len * segment_type_num + segment_type_idx
+        density_idx_end = (hour_idx + 1) * single_t_d_len * segment_type_num
+        pop = density[density_idx_begin:density_idx_end:segment_type_num].sum()
+        segment_pop[segment_type_idx] = pop
+    for segment_idx in range(segment_type_num):
+        print(f"Segment {segment_range_lst[segment_idx]}:")
+        pop = segment_pop[segment_type_idx]
+        for s in range(S):
+            for c in range(C):
+                sigma_o_idx = np.arange(segment_idx * C * S * 2 + c * S * 2 + s * 2, len(sigma), segment_type_num * C * S * 2)
+#                denom = (d_vec[:,segment_idx] / d_total[segment_idx]).sum()
+                sigma_o_total = (sigma[sigma_o_idx] * 1).sum() / 1
+                sigma_h_total = (sigma[sigma_o_idx + 1] * 1).sum() / 1
+                if sigma_o_total + sigma_h_total > eps:
+                    print(f"\tS = {s}, C = {c + 1}: sigma_o = {sigma_o_total:.2f}, sigma_h = {sigma_h_total:.2f}")
+
 if DENSITY_RECALIBRATE:
     density = calibrate_density()
     np.save("density/preference_density_general.npy", density)
 else:
     density = np.load("density/preference_density_general.npy")
-describe_density(density)
+#describe_density(density)
 
-#sigma, flow = get_opt_flow(density, hour_idx = 12, rho = 0.25, tau_cs = np.array([10, 2.5, 0]).reshape((3, 1)), obj = "Min Congestion")
+#sigma, flow = get_opt_flow(density, hour_idx = 12, rho = 0.25, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, obj = "Min Congestion")
 #describe_sigma(sigma, density, hour_idx = 12)
-
+#
 #flow = np.array([0, 0, 0, 0, 2561.66744478, 853.88207294])
 #
 #toll = get_toll_from_flow(flow, density, hour_idx = 7, rho = 0.25)
 #print(toll)
+
+segment_type_strategy, loss_arr = get_flow_from_toll_iterative(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = 12, num_itr = 1000, lam = 1e-2)
+#print(segment_type_strategy.round(3))
+#print(segment_type_strategy.sum())
+print("Final Loss:", loss_arr[-1])
+describe_segment_type_strategy(segment_type_strategy, density, hour_idx = 12)
+plt.plot(loss_arr)
+#plt.yscale("log")
+plt.title(f"loss = {loss_arr[-1]:.2e}")
+plt.savefig("loss.png")
+plt.clf()
+plt.close()

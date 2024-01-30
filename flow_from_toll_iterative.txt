@@ -1,0 +1,58 @@
+Ordinary Flow: [3450.08867554 4022.06192397 4178.68796093 4062.52715107 6484.312946  ]
+HOT Flow: [ 668.26807812  822.89090479 1031.32490988  725.98730388 2316.40131026]
+Ordinary Travel Time: [17.03769697  4.95738676  5.86258491  3.36380371 43.18183642]
+HOT Travel Time: [11.80083096  2.85069455  3.67530813  1.80461082 55.15558904]
+Final Loss: 1.0227947067133613e-05
+Segment 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+	S = 0, C = 1: sigma_o = 0.62, sigma_h = 0.00
+	S = 0, C = 3: sigma_o = 0.00, sigma_h = 0.38
+Segment 3420 - Auto Mall NB to 3430 - Mowry NB:
+Segment 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	S = 0, C = 1: sigma_o = 0.20, sigma_h = 0.00
+	S = 0, C = 3: sigma_o = 0.01, sigma_h = 0.13
+	S = 1, C = 1: sigma_o = 0.20, sigma_h = 0.00
+	S = 1, C = 3: sigma_o = 0.02, sigma_h = 0.11
+	S = 2, C = 1: sigma_o = 0.20, sigma_h = 0.00
+	S = 2, C = 3: sigma_o = 0.04, sigma_h = 0.09
+Segment 3420 - Auto Mall NB to 3450 - Whipple NB:
+Segment 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+Segment 3430 - Mowry NB to 3430 - Mowry NB:
+	S = 1, C = 1: sigma_o = 0.69, sigma_h = 0.00
+	S = 1, C = 3: sigma_o = 0.00, sigma_h = 0.31
+Segment 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	S = 1, C = 1: sigma_o = 0.49, sigma_h = 0.00
+	S = 1, C = 3: sigma_o = 0.01, sigma_h = 0.00
+	S = 2, C = 1: sigma_o = 0.40, sigma_h = 0.09
+	S = 2, C = 3: sigma_o = 0.00, sigma_h = 0.01
+Segment 3430 - Mowry NB to 3450 - Whipple NB:
+Segment 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	S = 1, C = 1: sigma_o = 0.05, sigma_h = 0.00
+	S = 1, C = 3: sigma_o = 0.00, sigma_h = 0.20
+	S = 2, C = 1: sigma_o = 0.05, sigma_h = 0.00
+	S = 2, C = 3: sigma_o = 0.00, sigma_h = 0.20
+	S = 3, C = 1: sigma_o = 0.05, sigma_h = 0.00
+	S = 3, C = 3: sigma_o = 0.00, sigma_h = 0.20
+	S = 4, C = 1: sigma_o = 0.04, sigma_h = 0.01
+	S = 4, C = 3: sigma_o = 0.05, sigma_h = 0.15
+Segment 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+	S = 2, C = 1: sigma_o = 0.94, sigma_h = 0.00
+	S = 2, C = 2: sigma_o = 0.00, sigma_h = 0.04
+	S = 2, C = 3: sigma_o = 0.00, sigma_h = 0.01
+Segment 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	S = 2, C = 1: sigma_o = 0.50, sigma_h = 0.00
+	S = 3, C = 1: sigma_o = 0.50, sigma_h = 0.00
+Segment 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	S = 2, C = 1: sigma_o = 0.10, sigma_h = 0.00
+	S = 2, C = 3: sigma_o = 0.00, sigma_h = 0.23
+	S = 3, C = 1: sigma_o = 0.10, sigma_h = 0.00
+	S = 3, C = 3: sigma_o = 0.00, sigma_h = 0.22
+	S = 4, C = 1: sigma_o = 0.10, sigma_h = 0.00
+	S = 4, C = 3: sigma_o = 0.05, sigma_h = 0.18
+Segment 3450 - Whipple NB to 3450 - Whipple NB:
+	S = 3, C = 1: sigma_o = 1.00, sigma_h = 0.00
+Segment 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+	S = 3, C = 1: sigma_o = 0.50, sigma_h = 0.00
+	S = 4, C = 1: sigma_o = 0.50, sigma_h = 0.00
+Segment 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+	S = 4, C = 1: sigma_o = 0.49, sigma_h = 0.00
+	S = 4, C = 3: sigma_o = 0.00, sigma_h = 0.51
