@@ -134,7 +134,7 @@ def solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, c_o, c_h, tau_cs):
     tau_cs = tau_cs.reshape((n_data, 1, C, S))
     cost_o = beta_lst * c_o
     cost_h = beta_lst * c_h + gamma_lst_c + tau_cs
-    lane_cs = (cost_h < c_o) + 0
+    lane_cs = (cost_h < cost_o) + 0
     total_cost_mat = lane_cs * cost_h + (1 - lane_cs) * cost_o #np.sum(lane_cs * cost_h + (1 - lane_cs) * cost_o, axis = 3)
     total_cost_c_lst = []
     best_c_lst = []
@@ -607,6 +607,18 @@ def describe_sigma(sigma, density, hour_idx):
                 sigma_h_total = (sigma[sigma_o_idx + 1] * d_vec[:,segment_idx]).sum() / d_total[segment_idx]
                 print(f"\tS = {s}, C = {c + 1}: sigma_o = {sigma_o_total}, sigma_h = {sigma_h_total}")
 
+def get_segment_pop(density, hour_idx):
+    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
+    single_t_d_len = len(d_idx_start_lst) - 1
+    segment_type_num = int(S * (S + 1) / 2)
+    segment_pop = np.zeros(segment_type_num)
+    for segment_type_idx in range(segment_type_num):
+        density_idx_begin = hour_idx * single_t_d_len * segment_type_num + segment_type_idx
+        density_idx_end = (hour_idx + 1) * single_t_d_len * segment_type_num
+        pop = density[density_idx_begin:density_idx_end:segment_type_num].sum()
+        segment_pop[segment_type_idx] = pop
+    return segment_pop
+
 def get_flow_from_toll_iterative(density, tau_cs, rho = 0.25, hour_idx = 12, num_itr = 10, lam = 0.5):
     ### Get grid
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
@@ -615,17 +627,15 @@ def get_flow_from_toll_iterative(density, tau_cs, rho = 0.25, hour_idx = 12, num
     segment_type_num = int(S * (S + 1) / 2)
     d_len = int(N_HOUR * single_t_d_len * segment_type_num)
     ### Compute auxiliary matrices
-    segment_pop = np.zeros(segment_type_num)
-    for segment_type_idx in range(segment_type_num):
-        density_idx_begin = hour_idx * single_t_d_len * segment_type_num + segment_type_idx
-        density_idx_end = (hour_idx + 1) * single_t_d_len * segment_type_num
-        pop = density[density_idx_begin:density_idx_end:segment_type_num].sum()
-        segment_pop[segment_type_idx] = pop
+    segment_pop = get_segment_pop(density, hour_idx)
     segment_type_strategy_len = segment_type_num * C * S * 2
     equi_profile_len = len(beta_lst) * segment_type_num * C * S * 2
     segment_type_strategy_to_flow_o_map = np.zeros((S, segment_type_strategy_len))
     segment_type_strategy_to_flow_h_map = np.zeros((S, segment_type_strategy_len))
+    segment_type_strategy_to_agents_o_map = np.zeros((S, segment_type_strategy_len))
+    segment_type_strategy_to_agents_h_map = np.zeros((S, segment_type_strategy_len))
     equi_profile_to_strategy_density_vec = np.zeros((len(beta_lst), segment_type_strategy_len))
+    equi_profile_to_strategy_pop_vec = np.zeros((len(beta_lst), segment_type_strategy_len))
     segment_len_lst = np.zeros(segment_type_num)
     for c in range(C):
         segment_type_idx = 0
@@ -637,6 +647,8 @@ def get_flow_from_toll_iterative(density, tau_cs, rho = 0.25, hour_idx = 12, num
                 col_idx_h_end = col_idx_o_end + 1
                 segment_type_strategy_to_flow_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] = 1 / (c + 1) * segment_pop[segment_type_idx]
                 segment_type_strategy_to_flow_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] = 1 / (c + 1) * segment_pop[segment_type_idx]
+                segment_type_strategy_to_agents_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] = segment_pop[segment_type_idx]
+                segment_type_strategy_to_agents_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] = segment_pop[segment_type_idx]
                 segment_len_lst[segment_type_idx] = s_d + 1 - s_o
                 segment_type_idx += 1
     segment_density_lst = np.zeros(segment_type_num)
@@ -669,15 +681,21 @@ def get_flow_from_toll_iterative(density, tau_cs, rho = 0.25, hour_idx = 12, num
                             equi_val = d_val / elem_num / density_sum / segment_len_lst[segment_type_idx]
                             equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],o_idx_lst] = equi_val
                             equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],h_idx_lst] = equi_val
+                            equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],o_idx_lst] = equi_val * density_sum
+                            equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],h_idx_lst] = equi_val * density_sum
             segment_type_idx += 1
 #    print(equi_profile_to_strategy_density_vec.sum(), segment_type_strategy.sum())
     o_lanes = int(NUM_LANES * (1 - rho))
     h_lanes = NUM_LANES - o_lanes
-    for itr in tqdm(range(num_itr)):
+    utility_cost_arr = []
+    tau_lst = np.zeros((1, segment_type_strategy_len))
+    tau_lst[:,1::2] = np.tile(tau_cs.reshape(C * S), segment_type_num)
+    gamma_lst_c_long = np.tile(gamma_lst_c.repeat(S * 2, axis = 1), reps = (1, segment_type_num))
+    for itr in tqdm(range(num_itr), leave = False):
         ### Compute the corresponding latency
         flow_o = segment_type_strategy_to_flow_o_map @ segment_type_strategy
         flow_h = segment_type_strategy_to_flow_h_map @ segment_type_strategy
-        latency_o = get_cost(flow_o / o_lanes , DISTANCE_ARR)
+        latency_o = get_cost(flow_o / o_lanes, DISTANCE_ARR)
         latency_h = get_cost(flow_h / h_lanes, DISTANCE_ARR)
         ### Solve the equilibrium profile
         sigma_s_h, sigma_s_o = solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, latency_o, latency_h, tau_cs)
@@ -689,11 +707,38 @@ def get_flow_from_toll_iterative(density, tau_cs, rho = 0.25, hour_idx = 12, num
         loss = np.mean((segment_type_strategy - equi_profile) ** 2)
         segment_type_strategy = segment_type_strategy * (1 - lam) + equi_profile * lam
         loss_arr.append(loss)
+        latency_tmp = np.zeros(S * 2)
+        latency_tmp[::2] = latency_o
+        latency_tmp[1::2] = latency_h
+        latency_lst = np.tile(latency_tmp, segment_type_num * C).reshape((1, segment_type_strategy_len))
+        if itr > 0:
+            total_utility_cost_prev = (equi_profile_dens * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
+            equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
+            total_utility_cost = (equi_profile_dens * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
+            utility_cost_arr.append(total_utility_cost_prev - total_utility_cost)
+        else:
+            equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
+        
+    flow_o = segment_type_strategy_to_flow_o_map @ segment_type_strategy
+    flow_h = segment_type_strategy_to_flow_h_map @ segment_type_strategy
+    latency_o = get_cost(flow_o / o_lanes, DISTANCE_ARR)
+    latency_h = get_cost(flow_h / h_lanes, DISTANCE_ARR)
     print("Ordinary Flow:", flow_o)
     print("HOT Flow:", flow_h)
     print("Ordinary Travel Time:", latency_o)
     print("HOT Travel Time:", latency_h)
-    return segment_type_strategy, loss_arr
+    equi_profile_pop = equi_profile_to_strategy_pop_vec * sigma_s
+    agents_o = segment_type_strategy_to_agents_o_map @ segment_type_strategy
+    agents_h = segment_type_strategy_to_agents_h_map @ segment_type_strategy
+    total_travel_time = (agents_o * latency_o + agents_h * latency_h).sum()
+    total_emission = (flow_o * latency_o + flow_h * latency_h).sum()
+    total_revenue = (equi_profile_pop * tau_lst).sum()
+    latency_tmp = np.zeros(S * 2)
+    latency_tmp[::2] = latency_o
+    latency_tmp[1::2] = latency_h
+    latency_lst = np.tile(latency_tmp, segment_type_num * C).reshape((1, segment_type_strategy_len))
+    total_utility_cost = (equi_profile_pop * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
+    return segment_type_strategy, loss_arr, utility_cost_arr, latency_o, latency_h, total_travel_time, total_emission, total_revenue, total_utility_cost
 
 def describe_segment_type_strategy(sigma, density, hour_idx, eps = 1e-3):
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
@@ -708,15 +753,10 @@ def describe_segment_type_strategy(sigma, density, hour_idx, eps = 1e-3):
             segment_idx += 1
     # len(beta_lst) * segment_type_num * C * S * 2
     segment_type_num = int(S * (S + 1) / 2)
-    segment_pop = np.zeros(segment_type_num)
-    for segment_type_idx in range(segment_type_num):
-        density_idx_begin = hour_idx * single_t_d_len * segment_type_num + segment_type_idx
-        density_idx_end = (hour_idx + 1) * single_t_d_len * segment_type_num
-        pop = density[density_idx_begin:density_idx_end:segment_type_num].sum()
-        segment_pop[segment_type_idx] = pop
+    segment_pop = get_segment_pop(density, hour_idx)
     for segment_idx in range(segment_type_num):
         print(f"Segment {segment_range_lst[segment_idx]}:")
-        pop = segment_pop[segment_type_idx]
+        pop = segment_pop[segment_idx]
         for s in range(S):
             for c in range(C):
                 sigma_o_idx = np.arange(segment_idx * C * S * 2 + c * S * 2 + s * 2, len(sigma), segment_type_num * C * S * 2)
@@ -726,12 +766,61 @@ def describe_segment_type_strategy(sigma, density, hour_idx, eps = 1e-3):
                 if sigma_o_total + sigma_h_total > eps:
                     print(f"\tS = {s}, C = {c + 1}: sigma_o = {sigma_o_total:.2f}, sigma_h = {sigma_h_total:.2f}")
 
+def toll_design_grid_search_single(tau_tup_lst, density, hour_idx = 12, tau_max = 5, d_tau = 1, rho_lst = [0.25, 0.5, 0.75], num_itr = 1000, lam = 1e-2):
+    dct_results = {"Rho": [], "Loss": [], "Total Travel Time": [], "Total Emission": [], "Total Revenue": [], "Total Utility Cost": []}
+    for s in range(S):
+        dct_results[f"Toll {s}"] = []
+    for tau_tup in tqdm(tau_tup_lst):
+        ### Currently only support C = 3
+        tau_cs = np.zeros((C, S))
+        tau_cs[0,:] = np.array(tau_tup)
+        tau_cs[1,:] = tau_cs[0,:] / 4
+        for rho in rho_lst:
+            ### segment_type_num * C * S * 2
+            segment_type_strategy, loss_arr, latency_o, latency_h, total_travel_time, total_emission, total_revenue, total_utility_cost = get_flow_from_toll_iterative(density, tau_cs = tau_cs, rho = rho, hour_idx = hour_idx, num_itr = num_itr, lam = lam)
+            ### Store results
+            dct_results["Rho"].append(rho)
+            dct_results["Loss"].append(loss_arr[-1])
+            dct_results["Total Travel Time"].append(total_travel_time)
+            dct_results["Total Emission"].append(total_emission)
+            dct_results["Total Revenue"].append(total_revenue)
+            dct_results["Total Utility Cost"].append(total_utility_cost)
+            for s in range(S):
+                dct_results[f"Toll {s}"].append(tau_tup[s])
+    return dct_results
+
+def toll_design_grid_search(density, hour_idx = 12, tau_max = 5, d_tau = 1, rho_lst = [0.25, 0.5, 0.75], num_itr = 1000, lam = 1e-2):
+    dct_results = None
+    tau_lst_single = np.linspace(0, tau_max, int(tau_max // d_tau) + 1)
+    tau_tup_lst = list(itertools.product(*[tau_lst_single]*S))
+    batch_size = int(math.ceil(len(tau_tup_lst) / N_CPU))
+    results = Parallel(n_jobs = N_CPU)(delayed(toll_design_grid_search_single)(
+        tau_tup_lst[(i * batch_size):min((i + 1) * batch_size, len(tau_tup_lst))], density, hour_idx, tau_max, d_tau, rho_lst, num_itr, lam
+    ) for i in range(N_CPU))
+    for res in results:
+        if dct_results is None:
+            dct_results = res
+        else:
+            for key in dct_results:
+                dct_results[key] += res[key]
+    df = pd.DataFrame.from_dict(dct_results)
+    return df
+
 if DENSITY_RECALIBRATE:
     density = calibrate_density()
     np.save("density/preference_density_general.npy", density)
 else:
     density = np.load("density/preference_density_general.npy")
 #describe_density(density)
+
+segment_pop = get_segment_pop(density, 12)
+#print([round(x) for x in segment_pop])
+#print(segment_pop[0])
+#print(segment_pop[1] + segment_pop[5])
+#print(segment_pop[2] + segment_pop[6] + segment_pop[9])
+#print(segment_pop[3] + segment_pop[7] + segment_pop[10] + segment_pop[12])
+#print(segment_pop[4] + segment_pop[8] + segment_pop[11] + segment_pop[13] + segment_pop[14])
+#assert False
 
 #sigma, flow = get_opt_flow(density, hour_idx = 12, rho = 0.25, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, obj = "Min Congestion")
 #describe_sigma(sigma, density, hour_idx = 12)
@@ -741,14 +830,34 @@ else:
 #toll = get_toll_from_flow(flow, density, hour_idx = 7, rho = 0.25)
 #print(toll)
 
-segment_type_strategy, loss_arr = get_flow_from_toll_iterative(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = 12, num_itr = 1000, lam = 1e-2)
+segment_type_strategy, loss_arr, utility_cost_arr, latency_o, latency_h, total_travel_time, total_emission, total_revenue, total_utility_cost = get_flow_from_toll_iterative(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = 12, num_itr = 4000, lam = 1e-3)
 #print(segment_type_strategy.round(3))
 #print(segment_type_strategy.sum())
+print(total_travel_time, total_emission, total_revenue, total_utility_cost)
 print("Final Loss:", loss_arr[-1])
-describe_segment_type_strategy(segment_type_strategy, density, hour_idx = 12)
+describe_segment_type_strategy(segment_type_strategy, density, hour_idx = 12, eps = 1e-2)
+
 plt.plot(loss_arr)
 #plt.yscale("log")
 plt.title(f"loss = {loss_arr[-1]:.2e}")
 plt.savefig("loss.png")
 plt.clf()
 plt.close()
+
+plt.plot(utility_cost_arr)
+#plt.yscale("log")
+plt.title(f"Utility Cost = {utility_cost_arr[-1]:.2e}")
+plt.savefig("utility_cost.png")
+plt.clf()
+plt.close()
+
+df_all = None
+for hour_idx in tqdm(range(15)):
+    df = toll_design_grid_search(density, hour_idx = 12, tau_max = 5, d_tau = 1, rho_lst = [0.25, 0.5, 0.75], num_itr = 500, lam = 1e-2)
+    df["hour"] = hour_idx + 5
+    if df_all is None:
+        df_all = df
+    else:
+        df_all = pd.concat([df_all, df], ignore_index = True)
+# print(df)
+df.to_csv("toll_design_multiseg.csv", index = False)
