@@ -10,7 +10,8 @@ df_design = df_design[df_design["Rho"] == 0.25]
 df_toll = pd.read_csv("data/df_toll.csv")
 
 def plot_hourly_price(hour_lst, toll_design_lst, toll_avg_lst, toll_upper_lst, toll_lower_lst, goal, segment):
-    plt.plot(hour_lst, toll_design_lst, color = "red", label = "Optimal Toll Price")
+    if goal is not None:
+        plt.plot(hour_lst, toll_design_lst, color = "red", label = "Optimal Toll Price")
     plt.scatter(hour_lst, toll_avg_lst, color = "blue", label = "Current Toll Price")
     plt.fill_between(hour_lst, toll_lower_lst, toll_upper_lst, color = "blue", alpha = 0.2)
 #    plt.gcf().axes[0].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
@@ -18,7 +19,10 @@ def plot_hourly_price(hour_lst, toll_design_lst, toll_avg_lst, toll_upper_lst, t
     plt.xlabel("Time of Day")
     plt.ylabel(f"{segment} - {goal}")
     plt.legend(loc = "upper left")
-    plt.savefig(f"DynamicDesign/MultiSeg/{segment.lower().replace(' ', '_')}_{goal.lower().replace(' ', '_')}.png")
+    if goal is not None:
+        plt.savefig(f"DynamicDesign/MultiSeg/{segment.lower().replace(' ', '_')}_{goal.lower().replace(' ', '_')}.png")
+    else:
+        plt.savefig(f"DynamicDesign/MultiSeg/Obs/{segment.lower().replace(' ', '_')}.png")
     plt.clf()
     plt.close()
 
@@ -56,3 +60,4 @@ for segment_idx in range(len(SEGMENT_LST)):
     plot_hourly_price(hour_lst, min_emission_toll_lst, toll_avg_lst, toll_upper_lst, toll_lower_lst, "Min Emission", segment_short)
     plot_hourly_price(hour_lst, max_revenue_toll_lst, toll_avg_lst, toll_upper_lst, toll_lower_lst, "Max Revenue", segment_short)
     plot_hourly_price(hour_lst, min_utility_cost_toll_lst, toll_avg_lst, toll_upper_lst, toll_lower_lst, "Min Utility Cost", segment_short)
+    plot_hourly_price(hour_lst, None, toll_avg_lst, toll_upper_lst, toll_lower_lst, None, segment_short)
