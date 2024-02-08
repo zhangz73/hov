@@ -830,7 +830,7 @@ segment_pop = get_segment_pop(density, 12)
 #toll = get_toll_from_flow(flow, density, hour_idx = 7, rho = 0.25)
 #print(toll)
 
-segment_type_strategy, loss_arr, utility_cost_arr, latency_o, latency_h, total_travel_time, total_emission, total_revenue, total_utility_cost = get_flow_from_toll_iterative(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = 12, num_itr = 4000, lam = 1e-3)
+segment_type_strategy, loss_arr, utility_cost_arr, latency_o, latency_h, total_travel_time, total_emission, total_revenue, total_utility_cost = get_flow_from_toll_iterative(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = 12, num_itr = 100, lam = 1e-1)
 #print(segment_type_strategy.round(3))
 #print(segment_type_strategy.sum())
 print(total_travel_time, total_emission, total_revenue, total_utility_cost)
@@ -853,11 +853,11 @@ plt.close()
 
 df_all = None
 for hour_idx in tqdm(range(15)):
-    df = toll_design_grid_search(density, hour_idx = 12, tau_max = 5, d_tau = 1, rho_lst = [0.25, 0.5, 0.75], num_itr = 500, lam = 1e-2)
-    df["hour"] = hour_idx + 5
+    df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 1, rho_lst = [0.25], num_itr = 300, lam = 1e-2)
+    df["Hour"] = hour_idx + 5
     if df_all is None:
         df_all = df
     else:
         df_all = pd.concat([df_all, df], ignore_index = True)
 # print(df)
-df.to_csv("toll_design_multiseg.csv", index = False)
+df_all.to_csv("toll_design_multiseg.csv", index = False)
