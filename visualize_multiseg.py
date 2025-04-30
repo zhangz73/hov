@@ -5,20 +5,27 @@ import matplotlib.dates as mdates
 import matplotlib.ticker as mtick
 
 SEGMENT_LST = ['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', '3450 - Whipple NB', '3460 - Hesperian/238 NB']
-df_design = pd.read_csv("toll_design_multiseg.csv")
+df_design = pd.read_csv("../toll_design_multiseg.csv")
 df_design = df_design[df_design["Rho"] == 0.25]
 ## Date, Hour, Segment, Avg_total_toll
 df_toll = pd.read_csv("data/df_toll.csv")
 
+INT_GRID = 10
+N_POP = 1#INT_GRID ** 3 # 24546
+df_design["Total Travel Time"] /= N_POP
+df_design["Total Emission"] /= N_POP
+df_design["Total Utility Cost"] /= N_POP
+
 def plot_hourly_price(hour_lst, toll_design_lst, toll_avg_lst, toll_upper_lst, toll_lower_lst, goal, segment):
     if goal is not None:
         plt.plot(hour_lst, toll_design_lst, color = "red", label = "Optimal Toll Price")
-    plt.scatter(hour_lst, toll_avg_lst, color = "blue", label = "Current Toll Price")
-    plt.fill_between(hour_lst, toll_lower_lst, toll_upper_lst, color = "blue", alpha = 0.2)
+    plt.scatter(hour_lst, toll_avg_lst, color = "blue", label = "Average Actual Tolls")
+    plt.fill_between(hour_lst, toll_lower_lst, toll_upper_lst, color = "blue", alpha = 0.2, label = "95% CI of Actual Tolls")
 #    plt.gcf().axes[0].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 #    plt.gcf().autofmt_xdate()
     plt.xlabel("Time of Day")
-    plt.ylabel(f"{segment} - {goal}")
+    if goal is not None:
+        plt.ylabel(f"{segment} - {goal.replace('Utility ', '')}")
     plt.legend(loc = "upper left")
     if goal is not None:
         plt.savefig(f"DynamicDesign/MultiSeg/{segment.lower().replace(' ', '_')}_{goal.lower().replace(' ', '_')}.png")
@@ -30,17 +37,25 @@ def plot_hourly_price(hour_lst, toll_design_lst, toll_avg_lst, toll_upper_lst, t
 def plot_improvement(hour_lst, improvement_pct_lst, improvement_value_lst, goal, segment):
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
-    ax.bar(hour_lst, improvement_pct_lst, color = "blue", alpha = 0.5)
-    ax2.plot(hour_lst, improvement_value_lst, color = "red", alpha = 0.5)
+    lns1 = ax.bar(hour_lst, improvement_pct_lst, color = "blue", alpha = 0.5, label = "Pct. Improvement")
+    lns2 = ax2.plot(hour_lst, improvement_value_lst, color = "red", alpha = 0.5, label = "Nominal Improvement")
     ax2.scatter(hour_lst, improvement_value_lst, color = "red", alpha = 0.5)
     ax.yaxis.set_major_formatter(mtick.PercentFormatter())
-    ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter("${x:,.0f}"))
+    if goal in ["Max Revenue", "Min Utility Cost"]:
+        ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter("${x:,.0f}"))
+    else:
+        ax2.yaxis.set_major_formatter(mtick.StrMethodFormatter("{x:,.0f} mins"))
     plt.xlabel("Hour")
     plt.tight_layout()
+    lns = [lns1]+lns2
+    labs = [l.get_label() for l in lns]
+    plt.legend(lns, labs, loc = "upper left")
     plt.savefig(f"DynamicDesign/MultiSeg/Improvements/{segment.lower().replace(' ', '_')}_{goal.lower().replace(' ', '_')}.png")
     plt.clf()
     plt.close()
 
+N_HOURS = 15
+value_dct = {"congestion_current": np.zeros(N_HOURS), "congestion_best": np.zeros(N_HOURS), "emission_current": np.zeros(N_HOURS), "emission_best": np.zeros(N_HOURS), "revenue_current": np.zeros(N_HOURS), "revenue_best": np.zeros(N_HOURS), "utility_cost_current": np.zeros(N_HOURS), "utility_cost_best": np.zeros(N_HOURS)}
 for segment_idx in range(len(SEGMENT_LST)):
     segment = SEGMENT_LST[segment_idx]
     hour_lst = []
@@ -59,7 +74,7 @@ for segment_idx in range(len(SEGMENT_LST)):
     revenue_improvement_value_lst = []
     utility_cost_improvement_pct_lst = []
     utility_cost_improvement_value_lst = []
-    for hour_idx in range(15):
+    for hour_idx in range(N_HOURS):
         hour = 5 + hour_idx
         hour_lst.append(hour)
         df_design_curr = df_design[df_design["Hour"] == hour]
@@ -87,6 +102,14 @@ for segment_idx in range(len(SEGMENT_LST)):
         min_emission = df_design_curr["Total Emission"].min()
         max_revenue = df_design_curr["Total Revenue"].max()
         min_utility_cost = df_design_curr["Total Utility Cost"].min()
+        value_dct["congestion_current"][hour_idx] += curr_travel_time
+        value_dct["congestion_best"][hour_idx] += min_travel_time
+        value_dct["emission_current"][hour_idx] += curr_emission
+        value_dct["emission_best"][hour_idx] += min_emission
+        value_dct["revenue_current"][hour_idx] += curr_revenue
+        value_dct["revenue_best"][hour_idx] += max_revenue
+        value_dct["utility_cost_current"][hour_idx] += curr_utility_cost
+        value_dct["utility_cost_best"][hour_idx] += min_utility_cost
         congestion_improvement_pct_lst.append((curr_travel_time - min_travel_time) / curr_travel_time * 100)
         emission_improvement_pct_lst.append((curr_emission - min_emission) / curr_emission * 100)
         revenue_improvement_pct_lst.append((max_revenue - curr_revenue) / curr_revenue * 100)
@@ -105,3 +128,17 @@ for segment_idx in range(len(SEGMENT_LST)):
     plot_improvement(hour_lst, emission_improvement_pct_lst, emission_improvement_value_lst, "Min Emission", segment_short)
     plot_improvement(hour_lst, revenue_improvement_pct_lst, revenue_improvement_value_lst, "Max Revenue", segment_short)
     plot_improvement(hour_lst, utility_cost_improvement_pct_lst, utility_cost_improvement_value_lst, "Min Utility Cost", segment_short)
+
+## Compute total improvements
+total_congestion_improvement_value_lst = value_dct["congestion_current"] - value_dct["congestion_best"]
+total_congestion_improvement_pct_lst = (value_dct["congestion_current"] - value_dct["congestion_best"]) / value_dct["congestion_current"] * 100
+total_emission_improvement_value_lst = value_dct["emission_current"] - value_dct["emission_best"]
+total_emission_improvement_pct_lst = (value_dct["emission_current"] - value_dct["emission_best"]) / value_dct["emission_current"] * 100
+total_revenue_improvement_value_lst = value_dct["revenue_best"] - value_dct["revenue_current"]
+total_revenue_improvement_pct_lst = (value_dct["revenue_best"] - value_dct["revenue_current"]) / value_dct["revenue_current"] * 100
+total_utility_cost_improvement_value_lst = value_dct["utility_cost_current"] - value_dct["utility_cost_best"]
+total_utility_cost_improvement_pct_lst = (value_dct["utility_cost_current"] - value_dct["utility_cost_best"]) / value_dct["utility_cost_current"] * 100
+plot_improvement(hour_lst, total_congestion_improvement_pct_lst, total_congestion_improvement_value_lst, "Min Congestion", "total")
+plot_improvement(hour_lst, total_emission_improvement_pct_lst, total_emission_improvement_value_lst, "Min Emission", "total")
+plot_improvement(hour_lst, total_revenue_improvement_pct_lst, total_revenue_improvement_value_lst, "Max Revenue", "total")
+plot_improvement(hour_lst, total_utility_cost_improvement_pct_lst, total_utility_cost_improvement_value_lst, "Min Utility Cost", "total")

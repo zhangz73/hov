@@ -22,7 +22,7 @@ names = ["Timestamp", "Station", "District", "Freeway", "Direction", "LaneType",
 # df_flow = pd.read_csv("data/d04_text_station_hour_2021_01.txt", header = None, names = names)
 
 
-os.remove('data/df_PeMs.csv')
+#os.remove('data/df_PeMs.csv')
 should_header = True
 for segment in tqdm(segment_dct):
     for i in tqdm(range(1, 13), leave = False):

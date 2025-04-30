@@ -33,7 +33,7 @@ df_hov.columns = ["Hour", "HOV Travel Time", "HOV Travel Time Lower", "HOV Trave
 df_o = df_demand[["Hour", "Ordinary Travel Time"]].groupby("Hour").agg({"Ordinary Travel Time": ["mean", q1, q3]}).reset_index().sort_values("Hour")
 df_o.columns = ["Hour", "Ordinary Travel Time", "Ordinary Travel Time Lower", "Ordinary Travel Time Upper"]
 plt.scatter(df_hov["Hour"], df_hov["HOV Travel Time"], color = "blue")
-plt.plot(df_hov["Hour"], df_hov["HOV Travel Time"], color = "blue", label = "HOV Travel Time")
+plt.plot(df_hov["Hour"], df_hov["HOV Travel Time"], color = "blue", label = "HOT Travel Time")
 plt.fill_between(df_hov["Hour"], df_hov["HOV Travel Time Lower"], df_hov["HOV Travel Time Upper"], color = "blue", alpha = 0.2)
 plt.scatter(df_o["Hour"], df_o["Ordinary Travel Time"], color = "orange")
 plt.plot(df_o["Hour"], df_o["Ordinary Travel Time"], color = "orange", label = "Ordinary Travel Time")
@@ -51,7 +51,7 @@ df_hov.columns = ["Hour", "HOV Flow", "HOV Flow Lower", "HOV Flow Upper"]
 df_o = df_demand[["Hour", "Ordinary Flow"]].groupby("Hour").agg({"Ordinary Flow": ["mean", q1, q3]}).reset_index().sort_values("Hour")
 df_o.columns = ["Hour", "Ordinary Flow", "Ordinary Flow Lower", "Ordinary Flow Upper"]
 plt.scatter(df_hov["Hour"], df_hov["HOV Flow"], color = "blue")
-plt.plot(df_hov["Hour"], df_hov["HOV Flow"], color = "blue", label = "HOV Flow")
+plt.plot(df_hov["Hour"], df_hov["HOV Flow"], color = "blue", label = "HOT Flow")
 plt.fill_between(df_hov["Hour"], df_hov["HOV Flow Lower"], df_hov["HOV Flow Upper"], color = "blue", alpha = 0.2)
 plt.scatter(df_o["Hour"], df_o["Ordinary Flow"], color = "orange")
 plt.plot(df_o["Hour"], df_o["Ordinary Flow"], color = "orange", label = "Ordinary Flow")

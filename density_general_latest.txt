@@ -1,0 +1,393 @@
+Hour = 5:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 2188.316963930666
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 1918.0645298680984
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 2212.4595078198035
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 861.3796136549648
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 627.0197810971966
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 1426.7672205134809
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 869.7666341508461
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 2256.6313315558327
+Hour = 6:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 372.142456666908
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 522.4833477324075
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 398.8874546166946
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 351.0792629397216
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 1688.6396407855382
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 922.6807512898047
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 1009.6086652290477
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 2396.5611363860176
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 2237.192184782182
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 906.5372886564585
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (1, 2)]: 1099.683183611695
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 4487.317399366068
+Hour = 7:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 973.0621457479115
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 586.8449836028075
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 439.20399554219136
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 201.01678596689084
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 1457.972309227758
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 709.7780154837689
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 793.9838919447543
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 266.00901634337845
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 1747.468599199489
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 325.19786596066183
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 399.9829305148475
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 2264.896934462567
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 1253.6233632950411
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3277.7867611889237
+Hour = 8:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 895.3249570528812
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 664.7014363696205
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 48.52595027790466
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 44.17298267613913
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 2730.568250106741
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 49.87523651415318
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 46.522519885311326
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3740.9746613015673
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 50.904279358809724
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 47.36370957475114
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 653.2468019387775
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 65.90914204168712
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3578.297338113224
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 226.67915473845522
+Hour = 9:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 1314.2979026692642
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 875.4884540345329
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 2676.149435395504
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3010.558193157428
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 687.9880710231641
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 397.04139515464857
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3810.0726106446127
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+Hour = 10:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 2022.728388727428
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 12.041755421339879
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3280.833464690017
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 11.4616623932511
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3326.998693621212
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 3618.999901957683
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 317.53959396459925
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 2271.0276370417173
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (1, 2)]: 1385.347011794199
+Hour = 11:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 1581.3892589938987
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 581.7419579889743
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 1090.6218704589248
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 1382.201847384676
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 258.6389985162584
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 2382.213181228663
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 3739.6204523829824
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (1, 2)]: 3042.6985772984394
+Hour = 12:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 1293.0533083106
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 907.5119732691867
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 2675.7250696425285
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 3639.3938816404484
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 3228.6575098650965
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 330.96513682342095
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (1, 2)]: 2653.430919432272
+Hour = 13:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 1566.1904937732675
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 617.889956980868
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 1048.959429189002
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 1794.149547329832
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 715.0788046772423
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 1572.8520070918432
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 1531.2051706580648
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+Hour = 14:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 64.59981243451534
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 2050.4368049385007
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 704.1126117499192
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 179.70563749602238
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 684.3713857201703
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 219.83190755688804
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 156.91101118134955
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 404.83140347331596
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 172.11191681253354
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 319.57480265555824
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 17155.497025316985
+Hour = 15:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 628.4824823953354
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 91.12400414999608
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 1249.3078431788313
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 2982.2011562717603
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+		Beta = (1, 2), Gamma = [(0, 0), (1, 2), (0, 1)]: 278.4954192951457
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 2082.9400643263048
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (1, 2)]: 1078.6986512619835
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 40.86208044730042
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 2375.153965064981
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 24280.539402812512
+Hour = 16:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 1813.6490165836476
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 168.6073145642245
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 154.74122037982326
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 4042.671096085914
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 166.02118478792968
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 153.14703466902304
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (1, 2)]: 1591.6711415735683
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 2214.7598395126106
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 3716.509121186282
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 3561.072381361759
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 19019.6049511245
+Hour = 17:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (1, 2)]: 600.7797148228799
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 443.4267953591344
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 224.4796250001682
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 32.7326291738038
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 789.1396504352307
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 65.20941531815592
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 28.876456505343082
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 2173.277211328605
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 2410.800377353806
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 571.40218164368
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (1, 2)]: 733.1562749819324
+		Beta = (1, 2), Gamma = [(0, 0), (3, 4), (1, 2)]: 273.36558183867066
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 2544.459763055262
+		Beta = (1, 2), Gamma = [(0, 0), (1, 2), (1, 2)]: 496.70548113594475
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 2661.1820842019924
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 10071.812693906439
+		Beta = (1, 2), Gamma = [(0, 0), (1, 2), (0, 1)]: 425.23383491475045
+Hour = 18:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 1952.8392007026387
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 4654.650253346186
+		Beta = (1, 2), Gamma = [(0, 0), (0, 1), (0, 1)]: 438.0612493262355
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 2741.867853184959
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 874.7165043740607
+		Beta = (1, 2), Gamma = [(0, 0), (3, 4), (1, 2)]: 448.79590002871095
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 41.89521775179113
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (0, 1)]: 3676.4641627369297
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (0, 1)]: 51.680028206499394
+Hour = 19:
+	Segment type = 3420 - Auto Mall NB to 3420 - Auto Mall NB:
+	Segment type = 3420 - Auto Mall NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 2674.02210941006
+	Segment type = 3420 - Auto Mall NB to 3440 - Decoto/84 NB:
+	Segment type = 3420 - Auto Mall NB to 3450 - Whipple NB:
+	Segment type = 3420 - Auto Mall NB to 3460 - Hesperian/238 NB:
+	Segment type = 3430 - Mowry NB to 3430 - Mowry NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (0, 1)]: 957.76855385335
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 844.4246366142972
+	Segment type = 3430 - Mowry NB to 3440 - Decoto/84 NB:
+	Segment type = 3430 - Mowry NB to 3450 - Whipple NB:
+	Segment type = 3430 - Mowry NB to 3460 - Hesperian/238 NB:
+	Segment type = 3440 - Decoto/84 NB to 3440 - Decoto/84 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (0, 1)]: 3796.858291847746
+	Segment type = 3440 - Decoto/84 NB to 3450 - Whipple NB:
+	Segment type = 3440 - Decoto/84 NB to 3460 - Hesperian/238 NB:
+	Segment type = 3450 - Whipple NB to 3450 - Whipple NB:
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 3259.6258004984015
+	Segment type = 3450 - Whipple NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (2, 3), (1, 2)]: 340.7195441719342
+	Segment type = 3460 - Hesperian/238 NB to 3460 - Hesperian/238 NB:
+		Beta = (0, 1), Gamma = [(0, 0), (0, 1), (1, 2)]: 338.47671026737714
+		Beta = (0, 1), Gamma = [(0, 0), (1, 2), (1, 2)]: 2634.7605654694994
+		Beta = (0, 1), Gamma = [(0, 0), (3, 4), (1, 2)]: 386.2412502652062

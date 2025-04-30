@@ -15,7 +15,8 @@ from tqdm import tqdm
 
 ## Script Options
 N_CPU = 1
-DENSITY_RECALIBRATE = False
+DENSITY_RECALIBRATE = True
+TRAIN_FRAC = 0.8#0.8
 
 ## Hyperparameters
 NUM_LANES = 4
@@ -23,17 +24,23 @@ BPR_POWER = 4
 BPR_A = 7e-4 #2.4115e-13
 BPR_B = 0.7906
 DISTANCE = 7.16 # miles
+WINDOW_SIZE = 5 #15
 
 BETA_RANGE_LST = [(0, 1), (1, 2)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(0, 1), (1, 2), (2, 3), (3, 4)],
-    3: [(0, 1), (1, 2)]
+    2: [(0, 0.25), (0.25, 2), (2, 4)],
+    3: [(0, 0.25), (0.25, 2)]
 }
+#GAMMA_RANGE_DCT = {
+#    1: [(0, 0)],
+#    2: [(0, 0.25), (0.25, 2), (2, 4)],
+#    3: [(0, 0.25), (0.25, 1), (1, 2)]
+#}
 C = 3
 BETA_RANGE = (BETA_RANGE_LST[0][0], BETA_RANGE_LST[-1][1])
 GAMMA_RANGE_C = [(GAMMA_RANGE_DCT[c][0][0], GAMMA_RANGE_DCT[c][-1][1]) for c in range(1, C + 1)]
-INT_GRID = 10 #50
+INT_GRID = 12 #50
 
 ## Load Data
 ### Date, Hour, Segment, HOV Flow, Ordinary Flow, HOV Travel Time, Ordinary Travel Time, Avg_total_toll
@@ -43,28 +50,70 @@ df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
 df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
 df = df.dropna()
 df = df[(df["Date"] >= "2021-03-01") & (df["Date"] <= "2021-08-31")]
+#df = df[(df["Hour"] >= 12) & (df["Hour"] <= 18)]
+
+## Detrend the demand
+#df["demand"] = 0
+#for col in df.columns:
+#    if "Flow" in col:
+#        df["demand"] += df[col]
+#df_demand = df[["Date", "demand"]].groupby(["Date"]).sum().reset_index().sort_values("Date")
+#slope_intercept = np.polyfit(np.arange(df_demand.shape[0]), df_demand["demand"], 1)
+#demand_slope, demand_intercept = slope_intercept[0], slope_intercept[1]
+#df_demand["detrend_coef"] = demand_intercept / (demand_intercept + demand_slope * np.arange(df_demand.shape[0]))
+#df = df.merge(df_demand[["Date", "detrend_coef"]], on = "Date")
+#for col in df.columns:
+#    if "Flow" in col:
+#        df[col] = df[col] * df["detrend_coef"]
+#df_flow = df[["Date"] + [x for x in df.columns if "Flow" in x]].copy()
+#df_flow = df_flow.groupby(["Date"]).sum().reset_index()
+#df_detrend_coef = df_flow[["Date"]].copy()
+#for col in df_flow:
+#    if "Flow" in col:
+#        slope_intercept = np.polyfit(np.arange(df_flow.shape[0]), df_flow[col], 1)
+#        detrend_coef = slope_intercept[1] / (slope_intercept[1] + slope_intercept[0] * np.arange(df_flow.shape[0]))
+#        print(detrend_coef)
+##        df_flow[col] = df_flow[col] * detrend_coef
+##        df_flow[f"detrend_coef_{col}"] = detrend_coef
+#        df_detrend_coef[f"detrend_coef_{col}"] = detrend_coef
+#df = df.merge(df_detrend_coef, on = ["Date"])
+#for col in df.columns:
+#    if "Flow" in col and "detrend" not in col:
+#        df[col] = df[col] * df[f"detrend_coef_{col}"]
+
+data_cols = ['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
+for col in data_cols:
+    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 
 df_wide = df.pivot(index = ["Date", "Hour"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
 df_wide.columns = [x + "_" + y for x,y in df_wide.columns]
 segment_lst = list([x.split("_")[1].strip() for x in df_wide.columns if "HOV Flow" in x])
 S = len(segment_lst)
+# [14.074  3.165  3.46   2.105  7.16 ]
 DISTANCE_ARR = np.zeros(S)
 for segment_idx in range(len(segment_lst)):
     distance = df[df["Segment"] == segment_lst[segment_idx]].iloc[0]["Distance"]
     DISTANCE_ARR[segment_idx] = distance
 df_wide = df_wide.dropna()
 df_wide = df_wide.reset_index()
+#df_wide.to_csv("data/df_wide.csv", index = False)
 
 ## Cap speed at 65 mph/hr (i.e. at least 6.61 mins)
 # df["Ordinary Travel Time"] = df["Ordinary Travel Time"].apply(lambda x: max(x, 6.61))
 # df["HOV Travel Time"] = df["HOV Travel Time"].apply(lambda x: max(x, 6.61))
 ## Filter out rows where ordinary travel time is not larger than HOV travel time
 df = df[df["Ordinary Travel Time"] > df["HOV Travel Time"]]
+df = df.sort_values(["Date", "Hour"], ascending = True)
+#data_cols = ['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
+#for col in data_cols:
+#    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 df_pop["Sigma_1ratio"] = df_pop["Single"] / (df_pop["Single"] + df_pop["TwoPeople"] * 2 + df_pop["ThreePlus"] * 3)
 df_pop["Sigma_2ratio"] = df_pop["TwoPeople"] * 2 / (df_pop["Single"] + df_pop["TwoPeople"] * 2 + df_pop["ThreePlus"] * 3)
 df_pop["Sigma_3ratio"] = df_pop["ThreePlus"] * 3 / (df_pop["Single"] + df_pop["TwoPeople"] * 2 + df_pop["ThreePlus"] * 3)
 df = df.merge(df_pop[["Date", "Sigma_1ratio", "Sigma_2ratio", "Sigma_3ratio"]], on = "Date")
 df = df.sort_values(["Date", "Hour"], ascending = True)
+df = df.dropna()
+
 TAU_LST = np.array(df["Avg_total_toll"]) #list(df["Toll"])
 N_DATA = df_wide.shape[0] #df.shape[0] #100#
 TAU_CS_LST = np.zeros((N_DATA, C, S))
@@ -85,23 +134,35 @@ for segment_idx in range(len(segment_lst)):
     FLOW_O_LST[(N_DATA*segment_idx):(N_DATA*(segment_idx+1))] = np.array(df_wide[f"Ordinary Flow_{segment}"]) #np.array(df["Ordinary Flow"])
     FLOW_HOV_LST[(N_DATA*segment_idx):(N_DATA*(segment_idx+1))] = np.array(df_wide[f"HOV Flow_{segment}"]) #np.array(df["HOV Flow"])
 FLOW_TARGET = np.concatenate((FLOW_O_LST, FLOW_HOV_LST))
+FLOW_COEF = np.ones(len(FLOW_TARGET))
+FLOW_COEF[len(FLOW_O_LST):] = 3
 ###
-N_DATES = len(df["Date"].unique())
+#N_DATES = len(df["Date"].unique())
 ## N_DATES, N_DATA, S
 ## Days to ignore: 3/31, 4/23, 4/26, 6/30
 RATIO_INDEX_TO_IGNORE = [22, 39, 40, 86]
-PROFILE_DATE_MAP = np.zeros((N_DATES - len(RATIO_INDEX_TO_IGNORE), N_DATA))
-RATIO_TARGET = np.zeros((N_DATES - len(RATIO_INDEX_TO_IGNORE), C))
-date_lst = list(df.drop_duplicates("Date")["Date"])
+DATES_TO_IGNORE = ["2021-03-31", "2021-04-23", "2021-04-26", "2021-06-30"]
+date_lst = list(set(list(df.drop_duplicates("Date")["Date"])) - set(DATES_TO_IGNORE))
+date_lst.sort()
+N_DATES = len(date_lst)
+PROFILE_DATE_MAP = np.zeros((N_DATES, N_DATA))
+RATIO_TARGET = np.zeros((N_DATES, C))
 idx = 0
 tmp = []
+N_DATES_TRAIN = int(N_DATES * TRAIN_FRAC)
+N_DATES_TEST = N_DATES - N_DATES_TRAIN
+TRAIN_IDX = 0
 for i in range(len(date_lst)):
     date = date_lst[i]
     sigma_1ratio = df[df["Date"] == date].iloc[0]["Sigma_1ratio"]
     sigma_2ratio = df[df["Date"] == date].iloc[0]["Sigma_2ratio"]
     sigma_3ratio = df[df["Date"] == date].iloc[0]["Sigma_3ratio"]
     idx_lst = np.array(df_wide[df_wide["Date"] == date].index)
-    if i not in RATIO_INDEX_TO_IGNORE:
+#    if i not in RATIO_INDEX_TO_IGNORE:
+#    print(idx, date, PROFILE_DATE_MAP.shape)
+    if date not in DATES_TO_IGNORE:
+        if idx < N_DATES_TRAIN:
+            TRAIN_IDX = max(TRAIN_IDX, max(idx_lst) + 1)
         PROFILE_DATE_MAP[idx, idx_lst] = 1
         RATIO_TARGET[idx, 0] = sigma_1ratio
         RATIO_TARGET[idx, 1] = sigma_2ratio
@@ -109,6 +170,9 @@ for i in range(len(date_lst)):
         idx += 1
         tmp.append(date)
 date_lst = tmp
+print(date_lst[N_DATES_TRAIN])
+TRAIN_TEST = np.zeros(N_DATA)
+TRAIN_TEST[:TRAIN_IDX] = 1
 
 def get_cost(flow, distance):
     return ((BPR_A * flow) ** BPR_POWER + BPR_B) * distance
@@ -234,6 +298,47 @@ def profile_given_data_single(lo, hi, beta_lst, gamma_lst_c, segment_type_num):
         sigma_ns_o[data_idx,:,:,:,:] = sigma_s_o[0,:,:,:,:]
     return sigma_ns_h, sigma_ns_o
 
+def get_d_coef_matrix():
+    ### Get grid
+    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
+    segment_type_num = int(S * (S + 1) / 2)
+    ### Compute profile given data
+    sigma_ns_h = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+    sigma_ns_o = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+    batch_size = int(math.ceil(N_DATA / N_CPU))
+    results = Parallel(n_jobs = N_CPU)(delayed(profile_given_data_single)(
+        i * batch_size, min(N_DATA, (i + 1) * batch_size), beta_lst, gamma_lst_c, segment_type_num
+    ) for i in range(N_CPU))
+    for res in tqdm(results):
+        sigma_ns_h += res[0]
+        sigma_ns_o += res[1]
+    ## Compute equilibrium flow using d
+    single_t_d_len = len(d_idx_start_lst) - 1
+    d_len = int(N_HOUR * single_t_d_len * segment_type_num)
+    ### Compute equilibrium flows
+    ## TODO: Implement d_to_f_mat
+    ### o + h
+    d_coef_matrix = np.zeros((2 * N_DATA, d_len))
+    for hour_idx in tqdm(range(N_HOUR)):
+        t = UNIQUE_HOUR_LST[hour_idx]
+        relev_data_idx = np.where(HOUR_LST == t)[0]
+        for d_idx in range(single_t_d_len):
+            elem_num = d_idx_start_lst[d_idx + 1] - d_idx_start_lst[d_idx]
+            segment_idx = 0
+            for s_o in range(S):
+                for s_d in range(s_o, S):
+                    for s in range(s_o, s_d + 1):
+                        for c in range(C):
+                            d_coef_matrix[relev_data_idx, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += 1 / (c + 1) * sigma_ns_o[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num
+                            d_coef_matrix[N_DATA + relev_data_idx, hour_idx * single_t_d_len * segment_type_num + d_idx * segment_type_num + segment_idx] += 1 / (c + 1) * sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num
+                    segment_idx += 1
+    return d_coef_matrix
+
+def is_identifiable():
+    d_coef_matrix = get_d_coef_matrix()
+    mat_rank = np.linalg.matrix_rank(d_coef_matrix)
+    print(mat_rank, d_coef_matrix.shape)
+
 def calibrate_density():
     ## Get sigma profile for each grid
     ### Get grid
@@ -281,7 +386,9 @@ def calibrate_density():
     model.addConstr(d_to_f_mat @ d == f_equi)
     model.addConstr(d_to_fh_mat @ d == f_h_equi)
     model.addConstr(d_to_fh_total_mat @ d == f_h_total_equi)
-    objective = ((f_equi - FLOW_TARGET) * (f_equi - FLOW_TARGET)).sum() / N_DATA
+    ### Compute objective function
+    objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
+#    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
     ### Compute ratios of each toll class
     ratio_idx = [i for i in range(len(date_lst)) if i not in RATIO_INDEX_TO_IGNORE]
     flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
@@ -293,10 +400,10 @@ def calibrate_density():
     ratio_total = 0
     for c in range(C):
         ratio_total += 1 / (c + 1) * RATIO_TARGET[:,c] * flow_ratio_target_total
-        ratio_loss = (PROFILE_DATE_MAP @ f_h_equi[(c*N_DATA):((c+1)*N_DATA)] - RATIO_TARGET[:,c] * flow_ratio_target_total) #/ N_HOUR
-        objective += (ratio_loss * ratio_loss).sum() / N_DATA * 10
-#    model.addConstr(ratio_total >= daily_flow_lb)
-    objective += ((ratio_total - daily_flow_lb) * (ratio_total - daily_flow_lb)).sum() / N_DATA * 1
+        ratio_loss = (PROFILE_DATE_MAP[:N_DATES_TRAIN,:TRAIN_IDX] @ f_h_equi[(c*N_DATA):(c*N_DATA + TRAIN_IDX)] - RATIO_TARGET[:N_DATES_TRAIN,c] * flow_ratio_target_total[:N_DATES_TRAIN]) #/ N_HOUR
+        objective += (ratio_loss * ratio_loss).sum() / TRAIN_IDX * 10
+#        ratio_loss = (PROFILE_DATE_MAP @ f_h_equi[(c*N_DATA):((c+1)*N_DATA)] - RATIO_TARGET[:,c] * flow_ratio_target_total) #/ N_HOUR
+#        objective += (ratio_loss * ratio_loss).sum() / N_DATA * 10
     ### Optimize the model
     model.setObjective(objective, GRB.MINIMIZE)
     model.optimize()
@@ -806,21 +913,23 @@ def toll_design_grid_search(density, hour_idx = 12, tau_max = 5, d_tau = 1, rho_
     df = pd.DataFrame.from_dict(dct_results)
     return df
 
+is_identifiable()
+
 if DENSITY_RECALIBRATE:
     density = calibrate_density()
     np.save("density/preference_density_general.npy", density)
 else:
     density = np.load("density/preference_density_general.npy")
-#describe_density(density)
+describe_density(density)
 
-segment_pop = get_segment_pop(density, 12)
-#print([round(x) for x in segment_pop])
+#segment_pop = get_segment_pop(density, 12)
+##print([round(x) for x in segment_pop])
 #print(segment_pop[0])
 #print(segment_pop[1] + segment_pop[5])
 #print(segment_pop[2] + segment_pop[6] + segment_pop[9])
 #print(segment_pop[3] + segment_pop[7] + segment_pop[10] + segment_pop[12])
 #print(segment_pop[4] + segment_pop[8] + segment_pop[11] + segment_pop[13] + segment_pop[14])
-#assert False
+assert False
 
 #sigma, flow = get_opt_flow(density, hour_idx = 12, rho = 0.25, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, obj = "Min Congestion")
 #describe_sigma(sigma, density, hour_idx = 12)

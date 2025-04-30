@@ -16,6 +16,7 @@ RELEVANT_STATIONS_DCT = {
     "3450 - Whipple NB": [],
     "3460 - Hesperian/238 NB": [400488, 401561, 400611, 400928, 400284, 400041, 408133, 408135, 417665, 412637, 417666, 408134, 400685, 401003, 400898, 400275, 400939, 400180, 400529, 400990, 400515, 400252]
 }
+## Auto Mall Pkwy, Mowry Ave, Decoto Rd, Whipple Rd, Hesperian Blvd
 
 ## Load toll price data
 df = pd.read_csv("NB_042021-062021.csv")
