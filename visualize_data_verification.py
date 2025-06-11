@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.ticker as mtick
 
-TEST_BEGIN_DATE = "2021-07-31"
+TEST_BEGIN_DATE = "2021-05-07"
 
 ## Strategy profile
 df_strategy = pd.read_csv("tmp_ratio.csv")
@@ -33,10 +33,26 @@ plt.close()
 ## Calibrated flows v.s. actual flows
 df_flow = pd.read_csv("tmp.csv")
 df_flow["pct_diff"] = (df_flow["Flow Equi"] - df_flow["Flow Target"]) / df_flow["Flow Target"] * 100
+df_flow["abs_diff"] = (df_flow["Flow Equi"] - df_flow["Flow Target"])
 plt.hist(df_flow["pct_diff"], bins = 100)
+plt.axvline(x = 0, color = "red")
 plt.xlabel("% Difference in equilibrium flow v.s. actual flows")
 plt.gca().xaxis.set_major_formatter(mtick.PercentFormatter())
 plt.tight_layout()
 plt.savefig(f"DataVerification/flow.png")
 plt.clf()
 plt.close()
+for hour in df_flow["Hour"].unique():
+    for segment in df_flow["Segment"].unique():
+        for lane in df_flow["Lane Type"].unique():
+            df_sub = df_flow[(df_flow["Hour"] == hour) & (df_flow["Segment"] == segment) & (df_flow["Lane Type"] == lane)]
+            segment_fname = segment.replace("/", "").replace(" ", "")
+            plt.hist(df_sub["pct_diff"], bins = 100)
+            plt.axvline(x = 0, color = "red")
+            plt.xlabel("% Difference in equilibrium flow v.s. actual flows")
+            plt.title(f"Hour: {hour}, Segment: {segment}, {lane}")
+            plt.gca().xaxis.set_major_formatter(mtick.PercentFormatter())
+            plt.tight_layout()
+            plt.savefig(f"DataVerification/DetailedFlow/{hour}_{segment_fname}_{lane}_flow.png")
+            plt.clf()
+            plt.close()
