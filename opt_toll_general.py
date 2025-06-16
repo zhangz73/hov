@@ -543,7 +543,10 @@ def calibrate_density_synthetic(meta_data = None, data_dct = None):
         density[i] = d[i].x
     f_o_equi_ret = d_to_fo_mat @ density
     f_h_equi_ret = d_to_fh_mat @ density
-    df_tmp = pd.DataFrame.from_dict({"Flow Equi": f_equi_ret, "Flow Target": FLOW_TARGET})
+    df_tmp = pd.DataFrame.from_dict({"Flow O Equi": f_o_equi_ret, "Flow O Target": FLOW_O_TARGET})
+    for c in range(C):
+        df_tmp[f"Flow H Equi - {c}"] = f_h_equi_ret[c::C]
+        df_tmp[f"Flow H Target - {c}"] = FLOW_H_TARGET[c::C]
     df_tmp["Lane Type"] = LANE_TYPE_ALL
     df_tmp["Hour"] = HOUR_LST_ALL
     df_tmp["Segment"] = SEGMENT_LST_ALL
