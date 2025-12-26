@@ -18,7 +18,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 ## Script Options
-N_CPU = 2
+N_CPU = 1
 DENSITY_RECALIBRATE = True
 DENSITY_RETRAIN = True
 TRAIN_FRAC = 0.8#0.8
