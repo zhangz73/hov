@@ -18,11 +18,10 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 ## Script Options
-N_CPU = 4
+N_CPU = 2
 DENSITY_RECALIBRATE = True
-DENSITY_RETRAIN = False
+DENSITY_RETRAIN = True
 TRAIN_FRAC = 0.8#0.8
-USE_PRESPECIFIED_PARAMS = False
 
 ## Hyperparameters
 NUM_LANES = 4
@@ -32,12 +31,19 @@ BPR_B = 0.7906
 DISTANCE = 7.16 # miles
 WINDOW_SIZE = 5 #15
 
-BETA_RANGE_LST = [(0, 0.1), (0.1, 2), (4, 5)]
+BETA_RANGE_LST = [(x * 0.25, (x+1) * 0.25) for x in range(20)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(0, 0.1), (2, 4)],
-    3: [(0, 0.1), (1, 2)]
+    2: [(x * 0.25, (x+1) * 0.25) for x in range(16)],
+    3: [(x * 0.25, (x+1) * 0.25) for x in range(8)]
 }
+#BETA_RANGE_LST = [(0, 0.1), (0.1, 2), (4, 5)]
+#GAMMA_RANGE_DCT = {
+#    1: [(0, 0)],
+#    2: [(0, 0.1), (2, 4)],
+#    3: [(0, 0.1), (1, 2)]
+#}
+
 #BETA_GAMMA_RANGE_LST = [
 #    [(0, 0.1), (0, 0), (2, 4), (2, 4)],
 #    [(4, 5), (0, 0), (0, 0.1), (0, 0.1)],
@@ -51,9 +57,9 @@ GAMMA_RANGE_DCT = {
 #    3: [(0, 0.25), (0.25, 1), (1, 2)]
 #}
 C = 3
-BETA_RANGE = (BETA_RANGE_LST[0][0], BETA_RANGE_LST[-1][1])
-GAMMA_RANGE_C = [(GAMMA_RANGE_DCT[c][0][0], GAMMA_RANGE_DCT[c][-1][1]) for c in range(1, C + 1)]
-INT_GRID = 5 #50
+#BETA_RANGE = (BETA_RANGE_LST[0][0], BETA_RANGE_LST[-1][1])
+#GAMMA_RANGE_C = [(GAMMA_RANGE_DCT[c][0][0], GAMMA_RANGE_DCT[c][-1][1]) for c in range(1, C + 1)]
+INT_GRID = 1 #50
 
 ## Load Data
 ### Date, Hour, Segment, HOV Flow, Ordinary Flow, HOV Travel Time, Ordinary Travel Time, Avg_total_toll
@@ -227,7 +233,10 @@ class STEArgmin(torch.autograd.Function):
         input, index = ctx.saved_tensors
         # Straight-through estimator
         softmin = torch.softmin(input, dim = -1)
-        grad_input = grad_output.clone() * softmin
+        # Apply Jacobian-vector product of softmin:
+        # grad_input = J^T @ grad_output, where J is softmin's Jacobian
+        dot = (grad_output * softmin).sum(dim=-1, keepdim=True)
+        grad_input = softmin * (grad_output - dot)
         return grad_input
 
 def ste_argmin(input):
@@ -395,6 +404,7 @@ def profile_given_data_single(lo, hi, beta_lst, gamma_lst_c, segment_type_num, l
     return sigma_ns_h, sigma_ns_o
 
 def get_d_coef_matrix(sigma_ns_h, sigma_ns_o, meta_data = None, data_dct = None):
+    global N_HOUR, S, C, BETA_RANGE_LST, GAMMA_RANGE_DCT, HOUR_OD_DEMAND, N_DATA, HOUR_LST_ALL, HOUR_LST, UNIQUE_HOUR_LST
     if meta_data is not None:
         N_HOUR = meta_data["N_HOUR"]
         S = meta_data["S"]
@@ -462,7 +472,7 @@ def is_identifiable(sigma_ns_h, sigma_ns_o, meta_data = None, data_dct = None):
     d_coef_matrix = get_d_coef_matrix(sigma_ns_h, sigma_ns_o, meta_data = meta_data, data_dct = data_dct)
     mat_rank = np.linalg.matrix_rank(d_coef_matrix)
     print(mat_rank, d_coef_matrix.shape)
-#    d_coef_matrix_shorter, d_idx_dropped = drop_dependent_columns(d_coef_matrix)
+    d_coef_matrix_shorter, d_idx_dropped = drop_dependent_columns(d_coef_matrix)
 #    mat_rank = np.linalg.matrix_rank(d_coef_matrix_shorter)
 #    print(mat_rank, d_coef_matrix_shorter.shape)
 #    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
@@ -478,6 +488,7 @@ def is_identifiable(sigma_ns_h, sigma_ns_o, meta_data = None, data_dct = None):
 #                d_coef_idx += 1
 #    assert False
 #    return d_idx_dropped
+    return d_idx_dropped
 
 def generate_density(hourly_demand_weights = [], segment_demand_lst = [], density_lst = [], distance_arr = [], beta_range_lst = [], gamma_range_dct = {}, save = True, name = ""):
     ### Get grid
@@ -619,7 +630,7 @@ def calibrate_density():
     for res in tqdm(results):
         sigma_ns_h += res[0]
         sigma_ns_o += res[1]
-    is_identifiable(sigma_ns_h, sigma_ns_o)
+    d_idx_dropped = is_identifiable(sigma_ns_h, sigma_ns_o)
     ## Compute equilibrium flow using d
     single_t_d_len = len(d_idx_start_lst) - 1
     d_len = int(N_HOUR * single_t_d_len)
@@ -653,6 +664,14 @@ def calibrate_density():
         model.addConstr(d_to_f_mat @ d == f_equi)
         model.addConstr(d_to_fh_mat @ d == f_h_equi)
         model.addConstr(d_to_fh_total_mat @ d == f_h_total_equi)
+        for d_idx in d_idx_dropped:
+            model.addConstr(d[d_idx] == 0)
+        for hour_idx in range(N_HOUR):
+            density_expr = gp.LinExpr(0.0)
+            for k in range(single_t_d_len):
+                d_col = hour_idx * single_t_d_len + k
+                density_expr += d[d_col]
+            model.addConstr(density_expr == 1)
         ### Compute objective function
         objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
     #    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
@@ -747,7 +766,7 @@ def get_segment_pop(density, hour_idx):
         segment_pop[segment_type_idx] = pop
     return segment_pop
 
-def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, hour_idx = 12, num_itr = 10, lam = 0.5):
+def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, hour_idx = 12, num_itr = 10, lam = 0.5, schedule_lst = [], eta = 1):
     if meta_data is not None:
         N_HOUR = meta_data["N_HOUR"]
         S = meta_data["S"]
@@ -776,18 +795,18 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
     segment_len_lst = np.zeros(segment_type_num)
     for c in range(C):
         segment_type_idx = 0
-        demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
         for s_o in range(S):
             for s_d in range(s_o, S):
+                demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
                 col_idx_o_begin = segment_type_idx * C * S * 2 + c * S * 2 + s_o * 2
                 col_idx_o_end = segment_type_idx * C * S * 2 + c * S * 2 + (s_d + 1) * 2
                 col_idx_h_begin = col_idx_o_begin + 1
                 col_idx_h_end = col_idx_o_end + 1
-                segment_type_strategy_to_flow_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] = 1 / (c + 1) * demand
-                segment_type_strategy_to_flow_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] = 1 / (c + 1) * demand
-                segment_type_strategy_to_flow_h2_map[(s_o * C + c):((s_d+1) * C + c):C, col_idx_h_begin:col_idx_h_end:2] = 1 / (c + 1) * demand
-                segment_type_strategy_to_agents_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] = demand
-                segment_type_strategy_to_agents_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] = demand
+                segment_type_strategy_to_flow_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] += 1 / (c + 1) * demand
+                segment_type_strategy_to_flow_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] += 1 / (c + 1) * demand
+                segment_type_strategy_to_flow_h2_map[(s_o * C + c):((s_d+1) * C + c):C, col_idx_h_begin:col_idx_h_end:2] += 1 / (c + 1) * demand
+                segment_type_strategy_to_agents_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] += demand
+                segment_type_strategy_to_agents_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] += demand
                 segment_len_lst[segment_type_idx] = s_d + 1 - s_o
                 segment_type_idx += 1
     segment_density_lst = np.zeros(segment_type_num)
@@ -854,21 +873,26 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
         equi_profile = (equi_profile_to_strategy_density_vec * sigma_s).sum(dim = 0)
         ### Update the guess
         ratio = 1 / segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1).repeat_interleave(C * S * 2)
-        seg_prob = torch.clip(segment_type_strategy * ratio / segment_type_num, 1e-3, 1 - 1e-3)
-        equi_prob = torch.clip(equi_profile / segment_type_num, 1e-3, 1 - 1e-3)
+        EPS = 1e-3
+        seg_prob = torch.clip(segment_type_strategy * ratio / segment_type_num, EPS, 1 - EPS)
+        equi_prob = torch.clip(equi_profile / segment_type_num, EPS, 1 - EPS)
         sq_loss = torch.sum((segment_type_strategy - equi_profile) ** 2)
-        sq_loss.backward()
         loss = -torch.sum(seg_prob * torch.log(equi_prob) + (1 - seg_prob) * torch.log(1 - equi_prob))
-#        const_loss = torch.mean((segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1) - 1) ** 2) * 100
+        const_loss = torch.mean((segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1) - 1) ** 2) * 100
+        loss = sq_loss
+#        sq_loss += const_loss
+        sq_loss.backward()
 #        loss += const_loss
 #        loss.backward()
         with torch.no_grad():
             segment_type_strategy -= lam * segment_type_strategy.grad
-            ratio = 1 / segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1).repeat_interleave(C * S * 2)
-            segment_type_strategy *= ratio
+#            ratio = 1 / segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1).repeat_interleave(C * S * 2)
+#            segment_type_strategy *= ratio
 #            print(segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1))
         loss_arr.append(float(loss.data))
         segment_type_strategy.grad.zero_()
+        if itr in schedule_lst:
+            lam *= eta
         latency_tmp = np.zeros(S * 2)
         latency_tmp[::2] = latency_o.detach().numpy()
         latency_tmp[1::2] = latency_h.detach().numpy()
@@ -880,7 +904,8 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
 #            utility_cost_arr.append(total_utility_cost_prev - total_utility_cost)
 #        else:
 #            equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
-    
+    print(segment_type_strategy.data)
+    print(equi_profile.data)
     segment_type_strategy = segment_type_strategy.detach().numpy()
     sigma_s = sigma_s.detach().numpy()
     segment_type_strategy_to_flow_o_map = segment_type_strategy_to_flow_o_map.numpy()
@@ -909,9 +934,10 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
     total_utility_cost = (equi_profile_pop * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
     flow_o_equi = flow_o
     flow_h_equi = segment_type_strategy_to_flow_h2_map @ segment_type_strategy
-    # plt.plot(loss_arr)
-    # plt.show()
-    # assert False
+    plt.plot(loss_arr)
+    plt.title(loss_arr[-1])
+    plt.show()
+    assert False
     return segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi
 
 def get_flow_from_toll_iterative_heuristic(density, tau_cs, meta_data = None, rho = 0.25, hour_idx = 12, num_itr = 10, lam = 0.5):
@@ -1120,7 +1146,7 @@ def toll_design_grid_search(density, hour_idx = 12, tau_max = 5, d_tau = 1, rho_
     df = pd.DataFrame.from_dict(dct_results)
     return df
 
-def generate_synethetic_data_single(tau_tup_lst, density, meta_data, rho_lst = [0.25], num_itr = 1000, lam = 1e-2):
+def generate_synethetic_data_single(tau_tup_lst, density, meta_data, rho_lst = [0.25], num_itr = 1000, lam = 1e-2, schedule_lst = [], eta = 1):
     N_HOUR = meta_data["N_HOUR"]
     S = meta_data["S"]
     C = meta_data["C"]
@@ -1143,7 +1169,7 @@ def generate_synethetic_data_single(tau_tup_lst, density, meta_data, rho_lst = [
         for hour_idx in range(N_HOUR):
             for rho in rho_lst:
                 ### segment_type_num * C * S * 2
-                segment_type_strategy, loss_arr, latency_o, latency_h, _, _, _, _, _, flow_o_equi, flow_h_equi = get_flow_from_toll_iterative(density, tau_cs = TAU_CS_LST[i,:,:], meta_data = meta_data, rho = rho, hour_idx = hour_idx, num_itr = num_itr, lam = lam)
+                segment_type_strategy, loss_arr, latency_o, latency_h, _, _, _, _, _, flow_o_equi, flow_h_equi = get_flow_from_toll_iterative(density, tau_cs = TAU_CS_LST[i,:,:], meta_data = meta_data, rho = rho, hour_idx = hour_idx, num_itr = num_itr, lam = lam, schedule_lst = schedule_lst, eta = eta)
                 ### Store results
                 dct_results["Rho"].append(rho)
                 dct_results["Loss"].append(loss_arr[-1])
@@ -1158,10 +1184,10 @@ def generate_synethetic_data_single(tau_tup_lst, density, meta_data, rho_lst = [
                     dct_results[f"Toll {s}"].append(tau_tup[s])
     return dct_results
 
-def generate_synethetic_data(tau_tup_lst, density, meta_data, hour_idx = 0, rho_lst = [0.25], num_itr = 1000, lam = 1e-2):
+def generate_synethetic_data(tau_tup_lst, density, meta_data, hour_idx = 0, rho_lst = [0.25], num_itr = 1000, lam = 1e-2, schedule_lst = [], eta = 1):
     batch_size = int(math.ceil(len(tau_tup_lst) / N_CPU))
     results = Parallel(n_jobs = N_CPU)(delayed(generate_synethetic_data_single)(
-        tau_tup_lst[(i * batch_size):min((i+1) * batch_size, len(tau_tup_lst))], density, meta_data, rho_lst, num_itr
+        tau_tup_lst[(i * batch_size):min((i+1) * batch_size, len(tau_tup_lst))], density, meta_data, rho_lst, num_itr, lam, schedule_lst, eta
     ) for i in range(N_CPU))
     dct_results = None
     for res in results:
@@ -1191,6 +1217,7 @@ def generate_synethetic_data(tau_tup_lst, density, meta_data, hour_idx = 0, rho_
     dct_results["TAU_CS_LST"] = TAU_CS_LST
     return dct_results
 
+"""
 ## TODO: Create datasets
 hourly_demand_weights = [1]#[1, 2]
 segment_demand_lst = [5000, 10000, 5000]
@@ -1203,15 +1230,24 @@ gamma_range_dct = {
     3: [(0, 0.25), (0.25, 0.5)]
 }
 name = "2hour_2seg_uniform"
+SYNTHETIC_DATA_REGENERATE = True
 
-tau_tup_lst = []
-for t1 in np.arange(1, 7, 1):
-    for t2 in np.arange(1, 7, 1):
-        tau_tup_lst.append((t1, t2))
+if SYNTHETIC_DATA_REGENERATE:
+    tau_tup_lst = []
+    for t1 in np.arange(1, 7, 1):
+        for t2 in np.arange(1, 7, 1):
+            tau_tup_lst.append((t1, t2))
+    
+    density, meta_data = generate_density(hourly_demand_weights = hourly_demand_weights, segment_demand_lst = segment_demand_lst, density_lst = density_lst, distance_arr = distance_arr, beta_range_lst = beta_range_lst, gamma_range_dct = gamma_range_dct, save = True, name = name)
+    
+    data_dct = generate_synethetic_data(tau_tup_lst, density, meta_data, rho_lst = [0.25], num_itr = 2000, lam = 1e-3, schedule_lst = [200], eta = 0.1)
+    joblib.dump(data_dct, f"density/preference_density_synthetic_{name}_data.joblib")
+else:
+    density = np.load(f"density/preference_density_synthetic_{name}.npy")
+    meta_data = joblib.load(f"density/preference_density_synthetic_{name}_meta.joblib")
+    data_dct = joblib.load(f"density/preference_density_synthetic_{name}_data.joblib")
 
-density, meta_data = generate_density(hourly_demand_weights = hourly_demand_weights, segment_demand_lst = segment_demand_lst, density_lst = density_lst, distance_arr = distance_arr, beta_range_lst = beta_range_lst, gamma_range_dct = gamma_range_dct, save = True, name = name)
-
-data_dct = generate_synethetic_data(tau_tup_lst, density, meta_data, rho_lst = [0.25], num_itr = 2000, lam = 1e-3)
+#data_dct = generate_synethetic_data_single(tau_tup_lst, density, meta_data, rho_lst = [0.25], num_itr = 3000, lam = 1e-3, schedule_lst = [200], eta = 0.1)
 
 #print(data_dct)
 
@@ -1219,6 +1255,7 @@ density_calibrated = calibrate_density_synthetic(meta_data = meta_data, data_dct
 describe_density(density_calibrated, meta_data)
 
 assert False
+"""
 
 if DENSITY_RECALIBRATE:
     density = calibrate_density()
