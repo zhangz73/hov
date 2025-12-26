@@ -31,11 +31,11 @@ BPR_B = 0.7906
 DISTANCE = 7.16 # miles
 WINDOW_SIZE = 5 #15
 
-BETA_RANGE_LST = [(x * 0.25, (x+1) * 0.25) for x in range(20)]
+BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(25)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(x * 0.25, (x+1) * 0.25) for x in range(16)],
-    3: [(x * 0.25, (x+1) * 0.25) for x in range(8)]
+    2: [(x * 0.2, (x+1) * 0.2) for x in range(25)],
+    3: [(x * 0.2, (x+1) * 0.2) for x in range(25)]
 }
 #BETA_RANGE_LST = [(0, 0.1), (0.1, 2), (4, 5)]
 #GAMMA_RANGE_DCT = {
@@ -1263,7 +1263,7 @@ if DENSITY_RECALIBRATE:
         np.save("density/preference_density_general.npy", density)
 else:
     density = np.load("density/preference_density_general.npy")
-#describe_density(density)
+describe_density(density)
 
 assert False
 
