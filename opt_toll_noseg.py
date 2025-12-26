@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 ## Script Options
 N_CPU = 1
-DENSITY_RECALIBRATE = True
+DENSITY_RECALIBRATE = False
 DENSITY_RETRAIN = True
 TRAIN_FRAC = 0.8#0.8
 
@@ -724,6 +724,7 @@ def calibrate_density():
     return density
 
 def describe_density(density, meta_data = None):
+    global N_HOUR, S, C, BETA_RANGE_LST, GAMMA_RANGE_DCT, HOUR_OD_DEMAND, UNIQUE_HOUR_LST
     if meta_data is not None:
         N_HOUR = meta_data["N_HOUR"]
         S = meta_data["S"]
