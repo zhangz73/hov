@@ -29,23 +29,23 @@ BPR_POWER = 4
 BPR_A = 7e-4 #2.4115e-13
 BPR_B = 0.7906
 DISTANCE = 7.16 # miles
-WINDOW_SIZE = 5 #15
+WINDOW_SIZE = 3 #15
 
-"""
+
 BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(20)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
     2: [(x * 0.2, (x+1) * 0.2) for x in range(20)],
     3: [(x * 0.2, (x+1) * 0.2) for x in range(20)]
 }
-"""
 
-BETA_RANGE_LST = [(0, 0.1), (0.1, 2), (4, 5)]
-GAMMA_RANGE_DCT = {
-    1: [(0, 0)],
-    2: [(0, 0.1), (2, 4)],
-    3: [(0, 0.1), (1, 2)]
-}
+
+#BETA_RANGE_LST = [(0, 0.2), (0.2, 2), (4, 5)]
+#GAMMA_RANGE_DCT = {
+#    1: [(0, 0)],
+#    2: [(0, 0.2), (2, 4)],
+#    3: [(0, 0.2), (1, 2)]
+#}
 
 #BETA_GAMMA_RANGE_LST = [
 #    [(0, 0.1), (0, 0), (2, 4), (2, 4)],
@@ -74,41 +74,6 @@ df = df.dropna()
 df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
 df = df[(df["Hour"] >= 14) & (df["Hour"] <= 18)]
 #df = df[df["Segment"].isin(['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', '3450 - Whipple NB', '3460 - Hesperian/238 NB'])]
-#df_new = df.copy()
-#for col in ["HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"]:
-#    df_new[col] += np.random.normal(0, 1, size = df_new.shape[0]) * 0.1
-#df_new["Date"] = (pd.to_datetime(df["Date"]) + pd.DateOffset(months=6)).dt.strftime("%Y-%m-%d")
-#df = pd.concat([df, df_new], axis = 0, ignore_index = True).reset_index()
-#df = df.drop_duplicates(subset = ["Date", "Hour", "Segment"])
-
-## Detrend the demand
-#df["demand"] = 0
-#for col in df.columns:
-#    if "Flow" in col:
-#        df["demand"] += df[col]
-#df_demand = df[["Date", "demand"]].groupby(["Date"]).sum().reset_index().sort_values("Date")
-#slope_intercept = np.polyfit(np.arange(df_demand.shape[0]), df_demand["demand"], 1)
-#demand_slope, demand_intercept = slope_intercept[0], slope_intercept[1]
-#df_demand["detrend_coef"] = demand_intercept / (demand_intercept + demand_slope * np.arange(df_demand.shape[0]))
-#df = df.merge(df_demand[["Date", "detrend_coef"]], on = "Date")
-#for col in df.columns:
-#    if "Flow" in col:
-#        df[col] = df[col] * df["detrend_coef"]
-#df_flow = df[["Date"] + [x for x in df.columns if "Flow" in x]].copy()
-#df_flow = df_flow.groupby(["Date"]).sum().reset_index()
-#df_detrend_coef = df_flow[["Date"]].copy()
-#for col in df_flow:
-#    if "Flow" in col:
-#        slope_intercept = np.polyfit(np.arange(df_flow.shape[0]), df_flow[col], 1)
-#        detrend_coef = slope_intercept[1] / (slope_intercept[1] + slope_intercept[0] * np.arange(df_flow.shape[0]))
-##        print(detrend_coef)
-##        df_flow[col] = df_flow[col] * detrend_coef
-##        df_flow[f"detrend_coef_{col}"] = detrend_coef
-#        df_detrend_coef[f"detrend_coef_{col}"] = detrend_coef
-#df = df.merge(df_detrend_coef, on = ["Date"])
-#for col in df.columns:
-#    if "Flow" in col and "detrend" not in col:
-#        df[col] = df[col] * df[f"detrend_coef_{col}"]
 
 data_cols = ['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
 for col in data_cols:
@@ -618,6 +583,57 @@ def calibrate_density_synthetic(meta_data = None, data_dct = None):
     df_tmp.to_csv("tmp_synthetic.csv", index = False)
     return density
 
+def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t_d_len, d_idx_dropped):
+    model = gp.Model()
+    d = model.addMVar(d_len, lb = 0, vtype = GRB.CONTINUOUS, name = "d")
+    ### Compute equilibrium flows
+    f_equi = model.addMVar(2 * N_DATA * S, lb = 0, vtype = GRB.CONTINUOUS, name = "f")
+    f_h_equi = model.addMVar(C * N_DATA, lb = 0, vtype = GRB.CONTINUOUS, name = "fh")
+    f_h_total_equi = model.addMVar(N_DATA, lb = 0, vtype = GRB.CONTINUOUS, name = "fh_total")
+    model.addConstr(d_to_f_mat @ d == f_equi)
+    model.addConstr(d_to_fh_mat @ d == f_h_equi)
+    model.addConstr(d_to_fh_total_mat @ d == f_h_total_equi)
+    for d_idx in d_idx_dropped:
+        model.addConstr(d[d_idx] == 0)
+    for hour_idx in range(N_HOUR):
+        density_expr = gp.LinExpr(0.0)
+        for k in range(single_t_d_len):
+            d_col = hour_idx * single_t_d_len + k
+            density_expr += d[d_col]
+        model.addConstr(density_expr == 1)
+    ### Compute objective function
+    objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
+#    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
+    ### Compute ratios of each toll class
+    ratio_idx = [i for i in range(len(date_lst)) if i not in RATIO_INDEX_TO_IGNORE]
+    flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
+    ### Add constraints on lower bound of daily flow to avoid trivial solutions
+    all_seg_flow = 0
+    for s in range(S):
+        all_seg_flow += FLOW_TARGET[(N_DATA * S + s)::S]
+    daily_flow_lb = PROFILE_DATE_MAP @ all_seg_flow
+    ratio_total = 0
+    for c in range(C):
+        ratio_total += 1 / (c + 1) * RATIO_TARGET[:,c] * flow_ratio_target_total
+        ratio_loss = (PROFILE_DATE_MAP[:N_DATES_TRAIN,:TRAIN_IDX] @ f_h_equi[(c*N_DATA):(c*N_DATA + TRAIN_IDX)] - RATIO_TARGET[:N_DATES_TRAIN,c] * flow_ratio_target_total[:N_DATES_TRAIN]) #/ N_HOUR
+        objective += (ratio_loss * ratio_loss).sum() / TRAIN_IDX * 10
+#        ratio_loss = (PROFILE_DATE_MAP @ f_h_equi[(c*N_DATA):((c+1)*N_DATA)] - RATIO_TARGET[:,c] * flow_ratio_target_total) #/ N_HOUR
+#        objective += (ratio_loss * ratio_loss).sum() / N_DATA * 10
+    ### Optimize the model
+    model.setObjective(objective, GRB.MINIMIZE)
+    model.optimize()
+    obj_val = model.ObjVal
+    f_h_ret = np.zeros(C * N_DATA)
+    for i in range(C * N_DATA):
+        f_h_ret[i] = f_h_equi[i].x
+    f_h_total_ret = np.zeros(N_DATA)
+    for i in range(N_DATA):
+        f_h_total_ret[i] = f_h_total_equi[i].x
+    density = np.zeros(d_len)
+    for i in range(d_len):
+        density[i] = d[i].x
+    return obj_val, density, f_h_ret, f_h_total_ret
+
 def calibrate_density():
     ## Get sigma profile for each grid
     ### Get grid
@@ -658,54 +674,7 @@ def calibrate_density():
                             d_to_fh_total_mat[relev_data_idx, hour_idx * single_t_d_len + d_idx] += sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num * HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] #/ C #/ (s_d - s_o + 1)
                     segment_idx += 1
     if DENSITY_RETRAIN:
-        model = gp.Model()
-        d = model.addMVar(d_len, lb = 0, vtype = GRB.CONTINUOUS, name = "d")
-        ### Compute equilibrium flows
-        f_equi = model.addMVar(2 * N_DATA * S, lb = 0, vtype = GRB.CONTINUOUS, name = "f")
-        f_h_equi = model.addMVar(C * N_DATA, lb = 0, vtype = GRB.CONTINUOUS, name = "fh")
-        f_h_total_equi = model.addMVar(N_DATA, lb = 0, vtype = GRB.CONTINUOUS, name = "fh_total")
-        model.addConstr(d_to_f_mat @ d == f_equi)
-        model.addConstr(d_to_fh_mat @ d == f_h_equi)
-        model.addConstr(d_to_fh_total_mat @ d == f_h_total_equi)
-        for d_idx in d_idx_dropped:
-            model.addConstr(d[d_idx] == 0)
-        for hour_idx in range(N_HOUR):
-            density_expr = gp.LinExpr(0.0)
-            for k in range(single_t_d_len):
-                d_col = hour_idx * single_t_d_len + k
-                density_expr += d[d_col]
-            model.addConstr(density_expr == 1)
-        ### Compute objective function
-        objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
-    #    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
-        ### Compute ratios of each toll class
-        ratio_idx = [i for i in range(len(date_lst)) if i not in RATIO_INDEX_TO_IGNORE]
-        flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
-        ### Add constraints on lower bound of daily flow to avoid trivial solutions
-        all_seg_flow = 0
-        for s in range(S):
-            all_seg_flow += FLOW_TARGET[(N_DATA * S + s)::S]
-        daily_flow_lb = PROFILE_DATE_MAP @ all_seg_flow
-        ratio_total = 0
-        for c in range(C):
-            ratio_total += 1 / (c + 1) * RATIO_TARGET[:,c] * flow_ratio_target_total
-            ratio_loss = (PROFILE_DATE_MAP[:N_DATES_TRAIN,:TRAIN_IDX] @ f_h_equi[(c*N_DATA):(c*N_DATA + TRAIN_IDX)] - RATIO_TARGET[:N_DATES_TRAIN,c] * flow_ratio_target_total[:N_DATES_TRAIN]) #/ N_HOUR
-            objective += (ratio_loss * ratio_loss).sum() / TRAIN_IDX * 10
-    #        ratio_loss = (PROFILE_DATE_MAP @ f_h_equi[(c*N_DATA):((c+1)*N_DATA)] - RATIO_TARGET[:,c] * flow_ratio_target_total) #/ N_HOUR
-    #        objective += (ratio_loss * ratio_loss).sum() / N_DATA * 10
-        ### Optimize the model
-        model.setObjective(objective, GRB.MINIMIZE)
-        model.optimize()
-        obj_val = model.ObjVal
-        f_h_ret = np.zeros(C * N_DATA)
-        for i in range(C * N_DATA):
-            f_h_ret[i] = f_h_equi[i].x
-        f_h_total_ret = np.zeros(N_DATA)
-        for i in range(N_DATA):
-            f_h_total_ret[i] = f_h_total_equi[i].x
-        density = np.zeros(d_len)
-        for i in range(d_len):
-            density[i] = d[i].x
+        obj_val, density, f_h_ret, f_h_total_ret = optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t_d_len, d_idx_dropped)
     else:
         print("Loading density...")
         density = np.load("density/preference_density_general.npy")
