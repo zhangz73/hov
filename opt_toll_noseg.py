@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 ## Script Options
 N_CPU = 1
-DENSITY_RECALIBRATE = False
+DENSITY_RECALIBRATE = True
 DENSITY_RETRAIN = True
 TRAIN_FRAC = 0.8#0.8
 
@@ -31,18 +31,21 @@ BPR_B = 0.7906
 DISTANCE = 7.16 # miles
 WINDOW_SIZE = 5 #15
 
-BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(25)]
+"""
+BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(20)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(x * 0.2, (x+1) * 0.2) for x in range(25)],
-    3: [(x * 0.2, (x+1) * 0.2) for x in range(25)]
+    2: [(x * 0.2, (x+1) * 0.2) for x in range(20)],
+    3: [(x * 0.2, (x+1) * 0.2) for x in range(20)]
 }
-#BETA_RANGE_LST = [(0, 0.1), (0.1, 2), (4, 5)]
-#GAMMA_RANGE_DCT = {
-#    1: [(0, 0)],
-#    2: [(0, 0.1), (2, 4)],
-#    3: [(0, 0.1), (1, 2)]
-#}
+"""
+
+BETA_RANGE_LST = [(0, 0.1), (0.1, 2), (4, 5)]
+GAMMA_RANGE_DCT = {
+    1: [(0, 0)],
+    2: [(0, 0.1), (2, 4)],
+    3: [(0, 0.1), (1, 2)]
+}
 
 #BETA_GAMMA_RANGE_LST = [
 #    [(0, 0.1), (0, 0), (2, 4), (2, 4)],
