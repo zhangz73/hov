@@ -29,7 +29,7 @@ BPR_POWER = 4
 BPR_A = 7e-4 #2.4115e-13
 BPR_B = 0.7906
 DISTANCE = 7.16 # miles
-WINDOW_SIZE = 3 #15
+WINDOW_SIZE = 10 #15
 
 
 BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(20)]
