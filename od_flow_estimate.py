@@ -71,7 +71,6 @@ df_pems["Main Flow"] = df_pems["ML"] + df_pems["OR"] * (df_pems["Segment"] == "3
 df_pems["Out Flow"] = df_pems["ML"] * (df_pems["Segment"] == "3460 - Hesperian/238 NB") + df_pems["FR"]
 df_pems.to_csv("data/df_PeMs_FullLanes.csv", index = False)
 
-
 ### Calibrate total demand
 N_HOURS = len(df_pems["Hour"].unique())
 HOUR_LST = sorted(list(df_pems["Hour"].unique()))
@@ -82,12 +81,27 @@ demand_len = N_HOURS * segment_type_num
 constraint_mat = np.zeros((N_HOURS * S * 3, demand_len))
 target_vec = np.zeros(N_HOURS * S * 3)
 
+## Adjust the imbalance in flow
+for hour_idx in range(N_HOURS):
+    hour = HOUR_LST[hour_idx]
+    total_demand_in = 0
+    total_demand_out = 0
+    for s in range(S):
+        in_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["In Flow"]
+        out_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Out Flow"]
+        total_demand_in += in_flow
+        total_demand_out += out_flow
+    scale_factor = total_demand_out / total_demand_in
+    df_pems.loc[df_pems["Hour"] == hour, "In Flow"] *= scale_factor
+
 for hour_idx in range(N_HOURS):
     hour = HOUR_LST[hour_idx]
     for s in range(S):
-        target_vec[hour_idx * S * 3 + s] = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["In Flow"]
+        in_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["In Flow"]
+        out_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Out Flow"]
+        target_vec[hour_idx * S * 3 + s] = in_flow
         target_vec[hour_idx * S * 3 + S + s] = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Main Flow"]
-        target_vec[hour_idx * S * 3 + S * 2 + s] = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Out Flow"]
+        target_vec[hour_idx * S * 3 + S * 2 + s] = out_flow
     segment_idx = 0
     for s_o in range(S):
         for s_d in range(s_o, S):
@@ -230,7 +244,7 @@ def max_entropy_analytical():
 def bertsimas_n_yan():
     pass
 
-total_demand = max_entropy_gurobi(penalty_weight=100.0, min_flow=1e-6) #max_entropy_analytical()
+total_demand = max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6) #max_entropy_analytical()
 hour_lst_ret = []
 origin_lst_ret = []
 dest_lst_ret = []

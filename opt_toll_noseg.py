@@ -600,7 +600,7 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
         for k in range(single_t_d_len):
             d_col = hour_idx * single_t_d_len + k
             density_expr += d[d_col]
-        #model.addConstr(density_expr == 1)
+        model.addConstr(density_expr == 1)
     ### Compute objective function
     objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
 #    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
