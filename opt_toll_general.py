@@ -26,14 +26,23 @@ NUM_LANES = 4
 BPR_POWER = 4
 BPR_A = 7e-4 #2.4115e-13
 BPR_B = 0.7906
-WINDOW_SIZE = 5 #15
+WINDOW_SIZE = 10 #15
 
-BETA_RANGE_LST = [(0, 0.1), (1, 2)]
+BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(20)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(0, 0.1), (3, 4)],
-    3: [(0, 0.1), (3, 4)]
+    2: [(x * 0.2, (x+1) * 0.2) for x in range(20)],
+    3: [(x * 0.2, (x+1) * 0.2) for x in range(20)]
 }
+
+#BETA_RANGE_LST = [(0, 0.2), (0.2, 2), (4, 5)]
+#GAMMA_RANGE_DCT = {
+#    1: [(0, 0)],
+#    2: [(0, 0.2), (2, 4)],
+#    3: [(0, 0.2), (1, 2)]
+#}
+
+
 #BETA_GAMMA_RANGE_LST = [
 #    [(0, 0.1), (0, 0), (3, 4), (3, 4)],
 #    [(1, 2), (0, 0), (0, 0.1), (0, 0.1)],
@@ -49,7 +58,7 @@ GAMMA_RANGE_DCT = {
 C = 3
 BETA_RANGE = (BETA_RANGE_LST[0][0], BETA_RANGE_LST[-1][1])
 GAMMA_RANGE_C = [(GAMMA_RANGE_DCT[c][0][0], GAMMA_RANGE_DCT[c][-1][1]) for c in range(1, C + 1)]
-INT_GRID = 5 #50
+INT_GRID = 1 #50
 
 ## Load Data
 ### Date, Hour, Segment, HOV Flow, Ordinary Flow, HOV Travel Time, Ordinary Travel Time, Avg_total_toll
@@ -58,44 +67,9 @@ df = pd.read_csv("data/df_meta.csv") #pd.read_csv("hourly_demand_20210401.csv")
 df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
 df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
 df = df.dropna()
-df = df[(df["Date"] >= "2021-03-01") & (df["Date"] <= "2021-08-31")]
-#df = df[(df["Hour"] >= 12) & (df["Hour"] <= 18)]
+df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
+df = df[(df["Hour"] >= 14) & (df["Hour"] <= 18)]
 #df = df[df["Segment"].isin(['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', '3450 - Whipple NB', '3460 - Hesperian/238 NB'])]
-#df_new = df.copy()
-#for col in ["HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"]:
-#    df_new[col] += np.random.normal(0, 1, size = df_new.shape[0]) * 0.1
-#df_new["Date"] = (pd.to_datetime(df["Date"]) + pd.DateOffset(months=6)).dt.strftime("%Y-%m-%d")
-#df = pd.concat([df, df_new], axis = 0, ignore_index = True).reset_index()
-#df = df.drop_duplicates(subset = ["Date", "Hour", "Segment"])
-
-## Detrend the demand
-#df["demand"] = 0
-#for col in df.columns:
-#    if "Flow" in col:
-#        df["demand"] += df[col]
-#df_demand = df[["Date", "demand"]].groupby(["Date"]).sum().reset_index().sort_values("Date")
-#slope_intercept = np.polyfit(np.arange(df_demand.shape[0]), df_demand["demand"], 1)
-#demand_slope, demand_intercept = slope_intercept[0], slope_intercept[1]
-#df_demand["detrend_coef"] = demand_intercept / (demand_intercept + demand_slope * np.arange(df_demand.shape[0]))
-#df = df.merge(df_demand[["Date", "detrend_coef"]], on = "Date")
-#for col in df.columns:
-#    if "Flow" in col:
-#        df[col] = df[col] * df["detrend_coef"]
-#df_flow = df[["Date"] + [x for x in df.columns if "Flow" in x]].copy()
-#df_flow = df_flow.groupby(["Date"]).sum().reset_index()
-#df_detrend_coef = df_flow[["Date"]].copy()
-#for col in df_flow:
-#    if "Flow" in col:
-#        slope_intercept = np.polyfit(np.arange(df_flow.shape[0]), df_flow[col], 1)
-#        detrend_coef = slope_intercept[1] / (slope_intercept[1] + slope_intercept[0] * np.arange(df_flow.shape[0]))
-#        print(detrend_coef)
-##        df_flow[col] = df_flow[col] * detrend_coef
-##        df_flow[f"detrend_coef_{col}"] = detrend_coef
-#        df_detrend_coef[f"detrend_coef_{col}"] = detrend_coef
-#df = df.merge(df_detrend_coef, on = ["Date"])
-#for col in df.columns:
-#    if "Flow" in col and "detrend" not in col:
-#        df[col] = df[col] * df[f"detrend_coef_{col}"]
 
 data_cols = ['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
 for col in data_cols:
@@ -164,7 +138,7 @@ FLOW_COEF[len(FLOW_O_LST):] = 3
 ## N_DATES, N_DATA, S
 ## Days to ignore: 3/31, 4/23, 4/26, 6/30
 RATIO_INDEX_TO_IGNORE = [22, 39, 40, 86]
-DATES_TO_IGNORE = ["2021-03-31", "2021-04-23", "2021-04-26", "2021-06-30"]
+DATES_TO_IGNORE = ["2021-02-15", "2021-03-31", "2021-04-23", "2021-04-26", "2021-06-30"]
 date_lst = list(set(list(df.drop_duplicates("Date")["Date"])) - set(DATES_TO_IGNORE))
 date_lst.sort()
 N_DATES = len(date_lst)
@@ -423,7 +397,7 @@ def is_identifiable(sigma_ns_h, sigma_ns_o):
     d_coef_matrix = get_d_coef_matrix(sigma_ns_h, sigma_ns_o)
     mat_rank = np.linalg.matrix_rank(d_coef_matrix)
     print(mat_rank, d_coef_matrix.shape)
-#    d_coef_matrix_shorter, d_idx_dropped = drop_dependent_columns(d_coef_matrix)
+    d_coef_matrix_shorter, d_idx_dropped = drop_dependent_columns(d_coef_matrix)
 #    mat_rank = np.linalg.matrix_rank(d_coef_matrix_shorter)
 #    print(mat_rank, d_coef_matrix_shorter.shape)
 #    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
@@ -438,7 +412,7 @@ def is_identifiable(sigma_ns_h, sigma_ns_o):
 #                    print(t, d_idx, segment_idx)
 #                d_coef_idx += 1
 #    assert False
-#    return d_idx_dropped
+    return d_idx_dropped
 
 def generate_density(hourly_demand_weights = [], segment_demand_lst = [], density_lst = [], beta_range_lst = [], gamma_range_dct = {}, save = True, name = ""):
     ### Get grid
@@ -553,13 +527,7 @@ def calibrate_density_synthetic(meta_data = None, data_dct = None):
     df_tmp.to_csv("tmp.csv", index = False)
     return density
 
-def calibrate_density(meta_data = None):
-    if meta_data is not None:
-        N_HOUR = meta_data["N_HOUR"]
-        S = meta_data["S"]
-        C = meta_data["C"]
-        BETA_RANGE_LST = meta_data["BETA_RANGE_LST"]
-        GAMMA_RANGE_DCT = meta_data["GAMMA_RANGE_DCT"]
+def calibrate_density():
     ## Get sigma profile for each grid
     ### Get grid
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid(beta_range_lst = BETA_RANGE_LST, gamma_range_dct = GAMMA_RANGE_DCT)
@@ -607,6 +575,8 @@ def calibrate_density(meta_data = None):
     model.addConstr(d_to_f_mat @ d == f_equi)
     model.addConstr(d_to_fh_mat @ d == f_h_equi)
     model.addConstr(d_to_fh_total_mat @ d == f_h_total_equi)
+    for d_idx in d_idx_dropped:
+        model.addConstr(d[d_idx] == 0)
     ### Compute objective function
     objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
 #    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
@@ -875,6 +845,7 @@ def toll_design_grid_search(density, hour_idx = 12, tau_max = 5, d_tau = 1, rho_
     df = pd.DataFrame.from_dict(dct_results)
     return df
 
+"""
 ## TODO: Create datasets
 hourly_demand_weights = [1, 2]
 segment_demand_lst = [1000, 1000, 1000]
@@ -887,6 +858,7 @@ gamma_range_dct = {
 }
 name = "2hour_3seg_uniform"
 generate_density(hourly_demand_weights = hourly_demand_weights, segment_demand_lst = segment_demand_lst, density_lst = density_lst, beta_range_lst = beta_range_lst, gamma_range_dct = gamma_range_dct, save = True, name = name)
+"""
 
 if DENSITY_RECALIBRATE:
     density = calibrate_density()
