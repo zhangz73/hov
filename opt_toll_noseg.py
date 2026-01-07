@@ -616,7 +616,7 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     for c in range(C):
         ratio_total += 1 / (c + 1) * RATIO_TARGET[:,c] * flow_ratio_target_total
         ratio_loss = (PROFILE_DATE_MAP[:N_DATES_TRAIN,:TRAIN_IDX] @ f_h_equi[(c*N_DATA):(c*N_DATA + TRAIN_IDX)] - RATIO_TARGET[:N_DATES_TRAIN,c] * flow_ratio_target_total[:N_DATES_TRAIN]) #/ N_HOUR
-        objective += (ratio_loss * ratio_loss).sum() / TRAIN_IDX * 3
+        objective += (ratio_loss * ratio_loss).sum() / TRAIN_IDX * 10
 #        ratio_loss = (PROFILE_DATE_MAP @ f_h_equi[(c*N_DATA):((c+1)*N_DATA)] - RATIO_TARGET[:,c] * flow_ratio_target_total) #/ N_HOUR
 #        objective += (ratio_loss * ratio_loss).sum() / N_DATA * 10
     ### Optimize the model
