@@ -100,27 +100,114 @@ for hour_idx in range(N_HOURS):
             constraint_mat[hour_idx * S * 3 + S * 2 + s_d, demand_idx] = 1
             segment_idx += 1
 
-def max_entropy_gurobi():
-    model = gp.Model()
-    #model.Params.NonConvex = 2  # Allow log(T_ij)
+#def max_entropy_gurobi():
+#    model = gp.Model()
+#    #model.Params.NonConvex = 2  # Allow log(T_ij)
+#    demand_len = N_HOURS * segment_type_num
+#    total_demand = model.addVars(demand_len, lb = 0, vtype = GRB.CONTINUOUS, name = "d")
+#    demand_log = model.addVars(demand_len, name = "logd")
+#    for i in range(demand_len):
+#        model.addGenConstrLog(total_demand[i], demand_log[i])
+#    #for row in range(constraint_mat.shape[0]):
+#    #    model.addConstr(gp.quicksum(constraint_mat[row, i] * total_demand[i] for i in range(demand_len)) == target_vec[row])
+#    #model.addConstr(constraint_mat @ total_demand == target_vec)
+#    objective = -gp.quicksum(total_demand[i] * demand_log[i] for i in range(demand_len))
+#    for row in range(constraint_mat.shape[0]):
+#        objective += -(gp.quicksum(constraint_mat[row, i] * total_demand[i] for i in range(demand_len)) - target_vec[row]) * (gp.quicksum(constraint_mat[row, i] * total_demand[i] for i in range(demand_len)) - target_vec[row]) * 10
+#    model.setObjective(objective, GRB.MAXIMIZE)
+#    model.optimize()
+#    obj_val = model.ObjVal
+#    demand_ret = np.zeros(demand_len)
+#    for i in range(demand_len):
+#        demand_ret[i] = total_demand[i].x
+#    return demand_ret
+
+def max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6):
+    """
+    Max-entropy OD estimation with flow constraints enforced via L1 slacks.
+
+    Problem:
+        max  sum_i (-d_i * log d_i) - penalty_weight * sum_r (s_r^+ + s_r^-)
+        s.t. A_r * d + s_r^+ - s_r^- = target_r   for all rows r
+             d_i >= min_flow
+             s_r^+, s_r^- >= 0
+
+    Returns:
+        demand_ret: np.array of shape (demand_len,)
+    """
     demand_len = N_HOURS * segment_type_num
-    total_demand = model.addVars(demand_len, lb = 0, vtype = GRB.CONTINUOUS, name = "d")
-    demand_log = model.addVars(demand_len, name = "logd")
+    num_rows   = constraint_mat.shape[0]
+
+    model = gp.Model("max_entropy_od_l1")
+    model.Params.NonConvex = 2  # needed for log general constraints
+
+    # ------------------------------
+    # Variables
+    # ------------------------------
+    # OD flows
+    dvars = model.addMVar(demand_len, lb=min_flow, vtype=GRB.CONTINUOUS, name="d")
+
+    # log(d) variables for entropy term
+    logd = model.addMVar(demand_len, vtype=GRB.CONTINUOUS, name="logd")
+
+    # Slack variables per constraint row (positive and negative)
+    s_pos = model.addMVar(num_rows, lb=0.0, vtype=GRB.CONTINUOUS, name="s_pos")
+    s_neg = model.addMVar(num_rows, lb=0.0, vtype=GRB.CONTINUOUS, name="s_neg")
+
+    # ------------------------------
+    # logd[i] = log(dvars[i])   (scalar form)
+    # ------------------------------
     for i in range(demand_len):
-        model.addGenConstrLog(total_demand[i], demand_log[i])
-    #for row in range(constraint_mat.shape[0]):
-    #    model.addConstr(gp.quicksum(constraint_mat[row, i] * total_demand[i] for i in range(demand_len)) == target_vec[row])
-    #model.addConstr(constraint_mat @ total_demand == target_vec)
-    objective = -gp.quicksum(total_demand[i] * demand_log[i] for i in range(demand_len))
-    for row in range(constraint_mat.shape[0]):
-        objective += -(gp.quicksum(constraint_mat[row, i] * total_demand[i] for i in range(demand_len)) - target_vec[row]) * (gp.quicksum(constraint_mat[row, i] * total_demand[i] for i in range(demand_len)) - target_vec[row]) * 10
-    model.setObjective(objective, GRB.MAXIMIZE)
+        model.addGenConstrLog(dvars[i], logd[i], name=f"log_link_{i}")
+
+    # ------------------------------
+    # A_r * d + s_r^+ - s_r^- = target_r
+    # ------------------------------
+    row_exprs = []
+    for r in range(num_rows):
+        expr = gp.LinExpr()
+        row = constraint_mat[r, :]
+        for j, coef in enumerate(row):
+            if coef != 0.0:
+                expr += coef * dvars[j]
+        # store expr if you want to inspect later
+        row_exprs.append(expr)
+
+        model.addConstr(
+            expr + s_pos[r] - s_neg[r] == float(target_vec[r]),
+            name=f"flow_balance_{r}"
+        )
+
+    # ------------------------------
+    # Objective: entropy - L1 penalty on slacks
+    # ------------------------------
+    entropy_expr = gp.LinExpr()
+    for i in range(demand_len):
+        entropy_expr += - dvars[i] * logd[i]
+
+    slack_penalty = penalty_weight * (s_pos.sum() + s_neg.sum())
+
+    obj = entropy_expr - slack_penalty
+    model.setObjective(obj, GRB.MAXIMIZE)
+
     model.optimize()
-    obj_val = model.ObjVal
+
+    if model.Status not in (GRB.OPTIMAL, GRB.SUBOPTIMAL):
+        print(f"Gurobi terminated with status {model.Status}")
+
     demand_ret = np.zeros(demand_len)
     for i in range(demand_len):
-        demand_ret[i] = total_demand[i].x
+        demand_ret[i] = dvars[i].X
+
+    # Optional diagnostics:
+    max_resid = 0.0
+    for r in range(num_rows):
+        resid = s_pos[r].X - s_neg[r].X
+        max_resid = max(max_resid, abs(resid))
+    print("Max signed residual in constraints (via slacks):", max_resid)
+
     return demand_ret
+
 
 def max_entropy_analytical():
     demand_len = N_HOURS * segment_type_num
@@ -143,7 +230,7 @@ def max_entropy_analytical():
 def bertsimas_n_yan():
     pass
 
-total_demand = max_entropy_analytical()
+total_demand = max_entropy_gurobi(penalty_weight=100.0, min_flow=1e-6) #max_entropy_analytical()
 hour_lst_ret = []
 origin_lst_ret = []
 dest_lst_ret = []
