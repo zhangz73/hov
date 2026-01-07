@@ -56,3 +56,19 @@ for hour in df_flow["Hour"].unique():
             plt.savefig(f"DataVerification/DetailedFlow/{hour}_{segment_fname}_{lane}_flow.png")
             plt.clf()
             plt.close()
+
+## Calibrated flows v.s. actual flows
+df_flow = pd.read_csv("tmp.csv")
+df_flow.loc[df_flow["Lane Type"] == "Ordinary Lane", "Flow Target"] /= 3
+df_flow.loc[df_flow["Lane Type"] == "Ordinary Lane", "Flow Equi"] /= 3
+
+plt.scatter(df_flow[df_flow["Lane Type"] == "Ordinary Lane"]["Flow Target"], df_flow[df_flow["Lane Type"] == "Ordinary Lane"]["Flow Equi"], label = "Ordinary Lane")
+plt.scatter(df_flow[df_flow["Lane Type"] == "HOT Lane"]["Flow Target"], df_flow[df_flow["Lane Type"] == "HOT Lane"]["Flow Equi"], label = "HOT Lane")
+plt.axline((0, 0), slope=1, color='red', linestyle='--')
+plt.xlabel("Observed Flow")
+plt.ylabel("Equilibrium Flow")
+plt.legend()
+plt.tight_layout()
+plt.savefig(f"DataVerification/flow_comp.png")
+plt.clf()
+plt.close()

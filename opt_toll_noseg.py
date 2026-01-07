@@ -602,7 +602,11 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
             density_expr += d[d_col]
         model.addConstr(density_expr == 1)
     ### Compute objective function
-    objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
+    ## Ordinary lanes:
+    obj_ordinary = ((f_equi[:(TRAIN_IDX * S)] - FLOW_TARGET[:(TRAIN_IDX * S)]) * (f_equi[:(TRAIN_IDX * S)] - FLOW_TARGET[:(TRAIN_IDX * S)])).sum() / TRAIN_IDX
+    obj_hot = ((f_equi[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)] - FLOW_TARGET[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)]) * 3 * (f_equi[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)] - FLOW_TARGET[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)]) * 3).sum() / TRAIN_IDX
+    objective = obj_ordinary + obj_hot
+#    objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
 #    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
     ### Compute ratios of each toll class
     ratio_idx = [i for i in range(len(date_lst)) if i not in RATIO_INDEX_TO_IGNORE]

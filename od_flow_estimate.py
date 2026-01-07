@@ -82,18 +82,18 @@ constraint_mat = np.zeros((N_HOURS * S * 3, demand_len))
 target_vec = np.zeros(N_HOURS * S * 3)
 
 ## Adjust the imbalance in flow
-for hour_idx in range(N_HOURS):
-    hour = HOUR_LST[hour_idx]
-    total_demand_in = 0
-    total_demand_out = 0
-    for s in range(S):
-        in_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["In Flow"]
-        out_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Out Flow"]
-        total_demand_in += in_flow
-        total_demand_out += out_flow
-    scale_factor = total_demand_out / total_demand_in
-    df_pems.loc[df_pems["Hour"] == hour, "In Flow"] *= scale_factor
-    df_pems.loc[(df_pems["Hour"] == hour) & (df_pems["Segment"] == "3420 - Auto Mall N"), "Main Flow"] *= scale_factor
+#for hour_idx in range(N_HOURS):
+#    hour = HOUR_LST[hour_idx]
+#    total_demand_in = 0
+#    total_demand_out = 0
+#    for s in range(S):
+#        in_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["In Flow"]
+#        out_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Out Flow"]
+#        total_demand_in += in_flow
+#        total_demand_out += out_flow
+#    scale_factor = total_demand_out / total_demand_in
+#    df_pems.loc[df_pems["Hour"] == hour, "In Flow"] *= scale_factor
+#    df_pems.loc[(df_pems["Hour"] == hour) & (df_pems["Segment"] == "3420 - Auto Mall N"), "Main Flow"] *= scale_factor
 
 for hour_idx in range(N_HOURS):
     hour = HOUR_LST[hour_idx]
