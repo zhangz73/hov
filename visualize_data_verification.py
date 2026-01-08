@@ -61,9 +61,12 @@ for hour in df_flow["Hour"].unique():
 df_flow = pd.read_csv("tmp.csv")
 df_flow.loc[df_flow["Lane Type"] == "Ordinary Lane", "Flow Target"] /= 3
 df_flow.loc[df_flow["Lane Type"] == "Ordinary Lane", "Flow Equi"] /= 3
+df_flow["Data Type"] = df_flow["Date"].apply(lambda x: "Training" if x < TEST_BEGIN_DATE else "Test")
 
-plt.scatter(df_flow[df_flow["Lane Type"] == "Ordinary Lane"]["Flow Target"], df_flow[df_flow["Lane Type"] == "Ordinary Lane"]["Flow Equi"], label = "Ordinary Lane")
-plt.scatter(df_flow[df_flow["Lane Type"] == "HOT Lane"]["Flow Target"], df_flow[df_flow["Lane Type"] == "HOT Lane"]["Flow Equi"], label = "HOT Lane")
+plt.scatter(df_flow[(df_flow["Lane Type"] == "Ordinary Lane") & (df_flow["Data Type"] == "Training")]["Flow Target"], df_flow[(df_flow["Lane Type"] == "Ordinary Lane") & (df_flow["Data Type"] == "Training")]["Flow Equi"], label = "Ordinary Lane (Training)", alpha = 0.2)
+plt.scatter(df_flow[(df_flow["Lane Type"] == "HOT Lane") & (df_flow["Data Type"] == "Training")]["Flow Target"], df_flow[(df_flow["Lane Type"] == "HOT Lane") & (df_flow["Data Type"] == "Training")]["Flow Equi"], label = "HOT Lane (Training)", alpha = 0.2)
+plt.scatter(df_flow[(df_flow["Lane Type"] == "Ordinary Lane") & (df_flow["Data Type"] == "Test")]["Flow Target"], df_flow[(df_flow["Lane Type"] == "Ordinary Lane") & (df_flow["Data Type"] == "Test")]["Flow Equi"], label = "Ordinary Lane (Test)", alpha = 0.2)
+plt.scatter(df_flow[(df_flow["Lane Type"] == "HOT Lane") & (df_flow["Data Type"] == "Test")]["Flow Target"], df_flow[(df_flow["Lane Type"] == "HOT Lane") & (df_flow["Data Type"] == "Test")]["Flow Equi"], label = "HOT Lane (Test)", alpha = 0.2)
 plt.axline((0, 0), slope=1, color='red', linestyle='--')
 plt.xlabel("Observed Flow")
 plt.ylabel("Equilibrium Flow")

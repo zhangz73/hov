@@ -29,7 +29,7 @@ BPR_POWER = 4
 BPR_A = 7e-4 #2.4115e-13
 BPR_B = 0.7906
 DISTANCE = 7.16 # miles
-WINDOW_SIZE = 10 #15
+WINDOW_SIZE = 5 #15
 
 
 BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(20)]
@@ -75,7 +75,7 @@ df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
 df = df[(df["Hour"] >= 14) & (df["Hour"] <= 18)]
 #df = df[df["Segment"].isin(['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', '3450 - Whipple NB', '3460 - Hesperian/238 NB'])]
 
-data_cols = ['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
+data_cols = ['HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll'] #['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
 for col in data_cols:
     df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 
@@ -120,6 +120,7 @@ N_HOUR = len(df_wide["Hour"].unique())
 UNIQUE_HOUR_LST = np.array(df["Hour"].unique())
 SEGMENT_LST_ALL = []
 HOUR_LST_ALL = []
+DATE_LST_ALL = []
 ### TODO: Change it to multisegments later
 for segment_idx in range(len(segment_lst)):
     segment = segment_lst[segment_idx]
@@ -131,10 +132,12 @@ for segment_idx in range(len(segment_lst)):
     FLOW_HOV_LST[(N_DATA*segment_idx):(N_DATA*(segment_idx+1))] = np.array(df_wide[f"HOV Flow_{segment}"]) #np.array(df["HOV Flow"])
     SEGMENT_LST_ALL += [segment] * N_DATA
     HOUR_LST_ALL += list(df_wide["Hour"])
+    DATE_LST_ALL += list(df_wide["Date"])
 FLOW_TARGET = np.concatenate((FLOW_O_LST, FLOW_HOV_LST))
 LANE_TYPE_ALL = ["Ordinary Lane"] * len(HOUR_LST_ALL) + ["HOT Lane"] * len(HOUR_LST_ALL)
 SEGMENT_LST_ALL = SEGMENT_LST_ALL + SEGMENT_LST_ALL
 HOUR_LST_ALL = HOUR_LST_ALL + HOUR_LST_ALL
+DATE_LST_ALL = DATE_LST_ALL + DATE_LST_ALL
 FLOW_COEF = np.ones(len(FLOW_TARGET))
 FLOW_COEF[len(FLOW_O_LST):] = 3
 segment_type_num = int(S * (S + 1) / 2)
@@ -605,7 +608,7 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     ## Ordinary lanes:
     obj_ordinary = ((f_equi[:(TRAIN_IDX * S)] - FLOW_TARGET[:(TRAIN_IDX * S)]) * (f_equi[:(TRAIN_IDX * S)] - FLOW_TARGET[:(TRAIN_IDX * S)])).sum() / TRAIN_IDX
     obj_hot = ((f_equi[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)] - FLOW_TARGET[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)]) * (f_equi[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)] - FLOW_TARGET[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)])).sum() / TRAIN_IDX
-    objective = obj_ordinary + obj_hot * 15
+    objective = obj_ordinary + obj_hot * 9
 #    objective = ((f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)] * (f_equi[:(2 * TRAIN_IDX * S)] - FLOW_TARGET[:(2 * TRAIN_IDX * S)]) * FLOW_COEF[:(2 * TRAIN_IDX * S)]).sum() / TRAIN_IDX
 #    objective = ((f_equi - FLOW_TARGET) * FLOW_COEF * (f_equi - FLOW_TARGET) * FLOW_COEF).sum() / N_DATA
     ### Compute ratios of each toll class
@@ -687,6 +690,7 @@ def calibrate_density():
     f_equi_ret = d_to_f_mat @ density
     df_tmp = pd.DataFrame.from_dict({"Flow Equi": f_equi_ret, "Flow Target": FLOW_TARGET})
     df_tmp["Lane Type"] = LANE_TYPE_ALL
+    df_tmp["Date"] = DATE_LST_ALL
     df_tmp["Hour"] = HOUR_LST_ALL
     df_tmp["Segment"] = SEGMENT_LST_ALL
     df_tmp.to_csv("tmp.csv", index = False)

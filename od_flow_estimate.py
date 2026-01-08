@@ -7,7 +7,7 @@ import gurobipy as gp
 from gurobipy import GRB
 from tqdm import tqdm
 
-RELOAD_DATA = False
+RELOAD_DATA = True
 
 #RELEVANT_STATIONS = [400488, 401561, 400611, 400928, 400284, 400041, 408133, 408135, 417665, 412637, 417666, 408134, 400685, 401003, 400898, 400275, 400939, 400180, 400529, 400990, 400515, 400252]
 # RELEVANT_STATIONS = [400488, 400611, 400284, 400041, 412637, 417666, 400275, 400990, 400515, 400252]
@@ -29,11 +29,11 @@ if RELOAD_DATA:
     #os.remove('data/df_PeMs.csv')
     should_header = True
     for segment in tqdm(segment_dct):
-        for i in tqdm(range(1, 13), leave = False):
+        for i in tqdm(range(2, 5), leave = False):
             data_filename = "data/raw/d04_text_station_hour_2021_" + str(i).zfill(2) + ".txt"
             df_flow = pd.read_csv(data_filename, header = None, names = names)
 
-#            df_flow = df_flow.dropna(axis="columns", how = 'all')
+            df_flow = df_flow.dropna(axis="columns", how = 'all')
             df_flow = df_flow.loc[df_flow["Freeway"] == 880]
             df_flow = df_flow.loc[df_flow["Station"].isin(segment_dct[segment])]
             df_flow = df_flow.loc[df_flow["LaneType"].isin(["ML", "OR", "FR"])]
@@ -45,8 +45,12 @@ if RELOAD_DATA:
             df_flow["Time"] = pd.to_datetime(df_flow["Timestamp"])
             df_flow["Date"] = df_flow["Time"].dt.date
             df_flow["Hour"] = df_flow["Time"].dt.hour
+            df_flow["HOT Flow"] = df_flow["Lane 0 Flow"]
+            df_flow["Ordinary Flow"] = 0
+            for j in range(1,4):
+                df_flow["Ordinary Flow"] += df_flow["Lane " + str(j) + " Flow"]
 
-            df_flow = df_flow[["Date", "Hour", "LaneType", "Total Flow"]]
+            df_flow = df_flow[["Date", "Hour", "LaneType", "Ordinary Flow", "HOT Flow"]]
 
             
             df_flow = df_flow.groupby(["Date", "Hour", "LaneType"]).mean().reset_index()
@@ -59,6 +63,16 @@ if RELOAD_DATA:
             
 df_pems = pd.read_csv("data/df_PeMs_laneTypes.csv")
 print(df_pems)
+
+df_meta = pd.read_csv("Data/df_meta.csv")
+df_pems = df_pems.merge(df_meta[["Date", "Hour", "Avg_total_toll"]], on = ["Date", "Hour"])
+df_pems = df_pems.dropna()
+
+df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
+df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
+df_pems = df_pems.merge(df_pop, on = "Date")
+df_pems["Total"] = df_pems["Single"] + df_pems["TwoPeople"] + df_pems["ThreePlus"]
+df_pems["Total Flow"] = df_pems["Ordinary Flow"] + df_pems["HOT Flow"] * (1 * df_pems["Single"] / df_pems["Total"] + 2 * df_pems["TwoPeople"] / df_pems["Total"] + 3 * df_pems["ThreePlus"] / df_pems["Total"])
 
 ### Compute in-flow and out-flow
 df_pems = df_pems[["Hour", "Segment", "LaneType", "Total Flow"]].groupby(["Hour", "Segment", "LaneType"]).mean().reset_index()
@@ -80,20 +94,23 @@ segment_type_num = int(S * (S + 1) / 2)
 demand_len = N_HOURS * segment_type_num
 constraint_mat = np.zeros((N_HOURS * S * 3, demand_len))
 target_vec = np.zeros(N_HOURS * S * 3)
+demand_vec = np.zeros(N_HOURS)
+demand_scale_vec = np.zeros(N_HOURS)
 
 ## Adjust the imbalance in flow
-#for hour_idx in range(N_HOURS):
-#    hour = HOUR_LST[hour_idx]
-#    total_demand_in = 0
-#    total_demand_out = 0
-#    for s in range(S):
-#        in_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["In Flow"]
-#        out_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Out Flow"]
-#        total_demand_in += in_flow
-#        total_demand_out += out_flow
-#    scale_factor = total_demand_out / total_demand_in
+for hour_idx in range(N_HOURS):
+    hour = HOUR_LST[hour_idx]
+    total_demand_in = 0
+    total_demand_out = 0
+    for s in range(S):
+        in_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["In Flow"]
+        out_flow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s])].iloc[0]["Out Flow"]
+        total_demand_in += in_flow
+        total_demand_out += out_flow
+    scale_factor = total_demand_out / total_demand_in
 #    df_pems.loc[df_pems["Hour"] == hour, "In Flow"] *= scale_factor
 #    df_pems.loc[(df_pems["Hour"] == hour) & (df_pems["Segment"] == "3420 - Auto Mall N"), "Main Flow"] *= scale_factor
+    demand_scale_vec[hour_idx] = scale_factor
 
 for hour_idx in range(N_HOURS):
     hour = HOUR_LST[hour_idx]
@@ -230,6 +247,7 @@ def max_entropy_analytical():
     for hour_idx in range(N_HOURS):
         hour = HOUR_LST[hour_idx]
         segment_idx = 0
+        hour_demand_scale = demand_scale_vec[hour_idx]
         for s_o in range(S):
             origin_inflow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s_o])].iloc[0]["In Flow"]
             total_outflow = 0
@@ -237,8 +255,11 @@ def max_entropy_analytical():
                 total_outflow += df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s_d])].iloc[0]["Out Flow"]
             for s_d in range(s_o, S):
                 dest_outflow = df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s_d])].iloc[0]["Out Flow"]
+                total_inflow = 0
+                for s_o in range(s_d + 1):
+                    total_inflow += df_pems[(df_pems["Hour"] == hour) & (df_pems["Segment"] == SEGMENT_LST[s_o])].iloc[0]["In Flow"]
                 demand_idx = hour_idx * segment_type_num + segment_idx
-                total_demand[demand_idx] = origin_inflow * (dest_outflow / total_outflow)
+                total_demand[demand_idx] = origin_inflow * (dest_outflow / total_outflow) * hour_demand_scale #(origin_inflow * (dest_outflow / total_outflow) + (origin_inflow / total_inflow) * dest_outflow) / 2 #
                 segment_idx += 1
     return total_demand
 
