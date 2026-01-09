@@ -31,7 +31,7 @@ BPR_B = 0.7906
 DISTANCE = 7.16 # miles
 WINDOW_SIZE = 1 #15
 
-DELTA = 0.25
+DELTA = 0.125
 num_grids = int(4 / DELTA)
 
 #BETA_RANGE_LST = [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)]
@@ -41,11 +41,11 @@ num_grids = int(4 / DELTA)
 #    3: [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)]
 #}
 
-BETA_RANGE_LST = [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)]
+BETA_RANGE_LST = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)],
-    3: [(0, 0.5), (0.5, 1), (1, 2), (2, 3)]
+    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 }
 
 #BETA_RANGE_LST = [(0, 0.2), (0.2, 4)]
