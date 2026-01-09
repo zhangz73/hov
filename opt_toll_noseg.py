@@ -31,7 +31,7 @@ BPR_B = 0.7906
 DISTANCE = 7.16 # miles
 WINDOW_SIZE = 1 #15
 
-DELTA = 0.125
+DELTA = 0.0625
 num_grids = int(4 / DELTA)
 
 #BETA_RANGE_LST = [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)]
@@ -44,8 +44,8 @@ num_grids = int(4 / DELTA)
 BETA_RANGE_LST = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(0, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.5), (0.5, 1), (1, 2)]
+    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
 }
 
 #BETA_RANGE_LST = [(0, 0.2), (0.2, 4)]
@@ -387,10 +387,11 @@ def get_grid(beta_range_lst = BETA_RANGE_LST, gamma_range_dct = GAMMA_RANGE_DCT)
 
 def profile_given_data_single(lo, hi, beta_lst, gamma_lst_c, segment_type_num, latency_o_lst = LATENCY_O_LST, latency_hov_lst = LATENCY_HOV_LST, tau_cs_lst = TAU_CS_LST):
     N_DATA, C, S = tau_cs_lst.shape
-    sigma_ns_h = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
-    sigma_ns_o = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+    sigma_ns_h = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S), dtype=np.uint8)
+    sigma_ns_o = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S), dtype=np.uint8)
     for data_idx in tqdm(range(lo, hi)):
         sigma_s_h, sigma_s_o = solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, latency_o_lst[data_idx,:], latency_hov_lst[data_idx,:], tau_cs_lst[data_idx,:,:])
+        sigma_s_h, sigma_s_o = sigma_s_h.astype(np.uint8), sigma_s_o.astype(np.uint8)
         sigma_ns_h[data_idx,:,:,:,:] = sigma_s_h[0,:,:,:,:]
         sigma_ns_o[data_idx,:,:,:,:] = sigma_s_o[0,:,:,:,:]
     return sigma_ns_h, sigma_ns_o
