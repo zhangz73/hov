@@ -45,7 +45,7 @@ BETA_RANGE_LST = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
     2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
 }
 
 #BETA_RANGE_LST = [(0, 0.2), (0.2, 4)]
@@ -93,7 +93,7 @@ for col in data_cols:
     df[col] = df.groupby(["Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 #    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
-df = df[(df["Hour"] >= 17) & (df["Hour"] <= 17)]
+df = df[(df["Hour"] >= 14) & (df["Hour"] <= 18)]
 df = df.dropna()
 
 df_wide = df.pivot(index = ["Date", "Hour", "Minute"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
@@ -668,15 +668,18 @@ def calibrate_density():
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
     segment_type_num = int(S * (S + 1) / 2)
     ### Compute profile given data
-    sigma_ns_h = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
-    sigma_ns_o = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
-    batch_size = int(math.ceil(N_DATA / N_CPU))
-    results = Parallel(n_jobs = N_CPU)(delayed(profile_given_data_single)(
-        i * batch_size, min(N_DATA, (i + 1) * batch_size), beta_lst, gamma_lst_c, segment_type_num
-    ) for i in range(N_CPU))
-    for res in tqdm(results):
-        sigma_ns_h += res[0]
-        sigma_ns_o += res[1]
+    if N_CPU > 1:
+        sigma_ns_h = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+        sigma_ns_o = np.zeros((N_DATA, len(beta_lst), segment_type_num, C, S))
+        batch_size = int(math.ceil(N_DATA / N_CPU))
+        results = Parallel(n_jobs = N_CPU)(delayed(profile_given_data_single)(
+            i * batch_size, min(N_DATA, (i + 1) * batch_size), beta_lst, gamma_lst_c, segment_type_num
+        ) for i in range(N_CPU))
+        for res in tqdm(results):
+            sigma_ns_h += res[0]
+            sigma_ns_o += res[1]
+    else:
+        sigma_ns_h, sigma_ns_o = profile_given_data_single(0, N_DATA, beta_lst, gamma_lst_c, segment_type_num)
     d_idx_dropped = is_identifiable(sigma_ns_h, sigma_ns_o)
     ## Compute equilibrium flow using d
     single_t_d_len = len(d_idx_start_lst) - 1
