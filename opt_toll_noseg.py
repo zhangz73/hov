@@ -45,7 +45,7 @@ BETA_RANGE_LST = [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
     2: [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)],
-    3: [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)]
+    3: [(0, 0.5), (0.5, 1), (1, 2), (2, 3)]
 }
 
 #BETA_RANGE_LST = [(0, 0.2), (0.2, 4)]
@@ -320,10 +320,11 @@ def solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, c_o, c_h, tau_cs):
     return lane_cs_h, lane_cs_o #lane_cs[:,best_c,:]
 
 def elem_in_range(beta, gamma_c, lst):
-    if beta > lst[0][1]:
+    eps = 1e-9
+    if beta > lst[0][1] + eps:
         return False
     for c in range(C):
-        if gamma_c[c] > lst[c + 1][1]:
+        if gamma_c[c] > lst[c + 1][1] + eps:
             return False
     return True
 
