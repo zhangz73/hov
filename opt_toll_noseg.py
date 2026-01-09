@@ -44,8 +44,8 @@ num_grids = int(4 / DELTA)
 BETA_RANGE_LST = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
+    2: [(0, 0.5), (0.5, 1), (1, 2), (2, 4)],
+    3: [(0, 0.5), (0.5, 1), (1, 2)]
 }
 
 #BETA_RANGE_LST = [(0, 0.2), (0.2, 4)]
@@ -93,7 +93,7 @@ for col in data_cols:
     df[col] = df.groupby(["Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 #    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
-df = df[(df["Hour"] >= 14) & (df["Hour"] <= 18)]
+df = df[(df["Hour"] >= 15) & (df["Hour"] <= 18)]
 df = df.dropna()
 
 df_wide = df.pivot(index = ["Date", "Hour", "Minute"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
