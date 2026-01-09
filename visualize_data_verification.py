@@ -32,10 +32,12 @@ plt.close()
 
 ## Calibrated flows v.s. actual flows
 df_flow = pd.read_csv("tmp.csv")
+df_flow = df_flow[df_flow["Flow Target"] > 0]
 df_flow["pct_diff"] = (df_flow["Flow Equi"] - df_flow["Flow Target"]) / df_flow["Flow Target"] * 100
 df_flow["abs_diff"] = (df_flow["Flow Equi"] - df_flow["Flow Target"])
 plt.hist(df_flow["pct_diff"], bins = 100)
 plt.axvline(x = 0, color = "red")
+plt.xlim(-100, 100)
 plt.xlabel("% Difference in equilibrium flow v.s. actual flows")
 plt.gca().xaxis.set_major_formatter(mtick.PercentFormatter())
 plt.tight_layout()

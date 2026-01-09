@@ -29,16 +29,31 @@ BPR_POWER = 4
 BPR_A = 7e-4 #2.4115e-13
 BPR_B = 0.7906
 DISTANCE = 7.16 # miles
-WINDOW_SIZE = 5 #15
+WINDOW_SIZE = 1 #15
 
+DELTA = 0.25
+num_grids = int(4 / DELTA)
 
-BETA_RANGE_LST = [(x * 0.2, (x+1) * 0.2) for x in range(20)]
+#BETA_RANGE_LST = [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)]
+#GAMMA_RANGE_DCT = {
+#    1: [(0, 0)],
+#    2: [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)],
+#    3: [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)]
+#}
+
+BETA_RANGE_LST = [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)]
 GAMMA_RANGE_DCT = {
     1: [(0, 0)],
-    2: [(x * 0.2, (x+1) * 0.2) for x in range(20)],
-    3: [(x * 0.2, (x+1) * 0.2) for x in range(20)]
+    2: [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)],
+    3: [(0, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)]
 }
 
+#BETA_RANGE_LST = [(0, 0.2), (0.2, 4)]
+#GAMMA_RANGE_DCT = {
+#    1: [(0, 0)],
+#    2: [(0, 0.2), (0.2, 4)],
+#    3: [(0, 0.2), (0.2, 4)]
+#}
 
 #BETA_RANGE_LST = [(0, 0.2), (0.2, 2), (4, 5)]
 #GAMMA_RANGE_DCT = {
@@ -66,20 +81,22 @@ INT_GRID = 1 #50
 
 ## Load Data
 ### Date, Hour, Segment, HOV Flow, Ordinary Flow, HOV Travel Time, Ordinary Travel Time, Avg_total_toll
-df = pd.read_csv("data/df_meta.csv") #pd.read_csv("hourly_demand_20210401.csv")
+df = pd.read_csv("data/df_meta_5min.csv") #pd.read_csv("hourly_demand_20210401.csv")
 # df = df[df["Segment"] == "3460 - Hesperian/238 NB"]
 df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
 df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
-df = df.dropna()
-df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
-df = df[(df["Hour"] >= 14) & (df["Hour"] <= 18)]
+df = df.sort_values(["Date", "Hour", "Minute"], ascending = True)
 #df = df[df["Segment"].isin(['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', '3450 - Whipple NB', '3460 - Hesperian/238 NB'])]
 
 data_cols = ['HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll'] #['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
 for col in data_cols:
-    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
+    df[col] = df.groupby(["Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
+#    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
+df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
+df = df[(df["Hour"] >= 17) & (df["Hour"] <= 17)]
+df = df.dropna()
 
-df_wide = df.pivot(index = ["Date", "Hour"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
+df_wide = df.pivot(index = ["Date", "Hour", "Minute"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
 df_wide.columns = [x + "_" + y for x,y in df_wide.columns]
 segment_lst = list([x.split("_")[1].strip() for x in df_wide.columns if "HOV Flow" in x])
 S = len(segment_lst)
@@ -97,7 +114,7 @@ df_wide = df_wide.reset_index()
 # df["HOV Travel Time"] = df["HOV Travel Time"].apply(lambda x: max(x, 6.61))
 ## Filter out rows where ordinary travel time is not larger than HOV travel time
 df = df[df["Ordinary Travel Time"] > df["HOV Travel Time"]]
-df = df.sort_values(["Date", "Hour"], ascending = True)
+df = df.sort_values(["Date", "Hour", "Minute"], ascending = True)
 #data_cols = ['HOV Flow', 'Ordinary Flow', 'HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
 #for col in data_cols:
 #    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
@@ -105,7 +122,7 @@ df_pop["Sigma_1ratio"] = df_pop["Single"] / (df_pop["Single"] + df_pop["TwoPeopl
 df_pop["Sigma_2ratio"] = df_pop["TwoPeople"] * 2 / (df_pop["Single"] + df_pop["TwoPeople"] * 2 + df_pop["ThreePlus"] * 3)
 df_pop["Sigma_3ratio"] = df_pop["ThreePlus"] * 3 / (df_pop["Single"] + df_pop["TwoPeople"] * 2 + df_pop["ThreePlus"] * 3)
 df = df.merge(df_pop[["Date", "Sigma_1ratio", "Sigma_2ratio", "Sigma_3ratio"]], on = "Date")
-df = df.sort_values(["Date", "Hour"], ascending = True)
+df = df.sort_values(["Date", "Hour", "Minute"], ascending = True)
 df = df.dropna()
 
 TAU_LST = np.array(df["Avg_total_toll"]) #list(df["Toll"])
@@ -150,15 +167,15 @@ for hour_idx in range(N_HOUR):
         origin_seg = segment_lst[s_o]
         for s_d in range(s_o, S):
             dest_seg = segment_lst[s_d]
-            HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] = df_od_demand[(df_od_demand["Hour"] == hour) & (df_od_demand["Origin"] == origin_seg) & (df_od_demand["Destination"] == dest_seg)].iloc[0]["Demand"]
+            HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] = df_od_demand[(df_od_demand["Hour"] == hour) & (df_od_demand["Origin"] == origin_seg) & (df_od_demand["Destination"] == dest_seg)].iloc[0]["Demand"] / 12
             segment_idx += 1
 ###
 #N_DATES = len(df["Date"].unique())
 ## N_DATES, N_DATA, S
 ## Days to ignore: 3/31, 4/23, 4/26, 6/30
 RATIO_INDEX_TO_IGNORE = [22, 39, 40, 86]
-DATES_TO_IGNORE = ["2021-02-15", "2021-03-31", "2021-04-23", "2021-04-26", "2021-06-30"]
-date_lst = list(set(list(df.drop_duplicates("Date")["Date"])) - set(DATES_TO_IGNORE))
+DATES_TO_IGNORE = ["2021-02-15", "2021-03-31", "2021-04-23", "2021-04-26", "2021-04-28", "2021-06-30"]
+date_lst = list(set(list(df_wide.drop_duplicates("Date")["Date"])) - set(DATES_TO_IGNORE))
 date_lst.sort()
 N_DATES = len(date_lst)
 PROFILE_DATE_MAP = np.zeros((N_DATES, N_DATA))
@@ -178,6 +195,8 @@ for i in range(len(date_lst)):
 #    print(idx, date, PROFILE_DATE_MAP.shape)
     if date not in DATES_TO_IGNORE:
         if idx < N_DATES_TRAIN:
+            if len(idx_lst) == 0:
+                print(date)
             TRAIN_IDX = max(TRAIN_IDX, max(idx_lst) + 1)
         PROFILE_DATE_MAP[idx, idx_lst] = 1
         RATIO_TARGET[idx, 0] = sigma_1ratio
@@ -346,11 +365,12 @@ def get_grid(beta_range_lst = BETA_RANGE_LST, gamma_range_dct = GAMMA_RANGE_DCT)
     beta_gamma_range_lst = get_beta_gamma_range_lst(beta_range_lst = beta_range_lst, gamma_range_dct = gamma_range_dct)
     beta_lst = []
     gamma_lst_c = []
+    eps = 1e-9
     for lst in beta_gamma_range_lst:
-        beta_curr = np.linspace(lst[0][0], lst[0][1], INT_GRID + 1) #beta_vec[(beta_vec > lst[0][0]) & (beta_vec <= lst[0][1])]
+        beta_curr = np.arange(lst[0][0], lst[0][1] + eps, DELTA) #np.linspace(lst[0][0], lst[0][1], INT_GRID + 1) #beta_vec[(beta_vec > lst[0][0]) & (beta_vec <= lst[0][1])]
         gamma_c_curr = []
         for c in range(1, C):
-            tmp = np.linspace(lst[c+1][0], lst[c+1][1], INT_GRID + 1) #gamma_mat[c,:][(gamma_mat[c,:] > lst[c+1][0]) & (gamma_mat[c,:] <= lst[c+1][1])]
+            tmp = np.arange(lst[c+1][0], lst[c+1][1] + eps, DELTA) #np.linspace(lst[c+1][0], lst[c+1][1], INT_GRID + 1) #gamma_mat[c,:][(gamma_mat[c,:] > lst[c+1][0]) & (gamma_mat[c,:] <= lst[c+1][1])]
             gamma_c_curr.append(tmp)
         grid_tup = [x.ravel() for x in np.meshgrid(beta_curr, *gamma_c_curr, indexing = "ij")]
         beta_lst_curr = grid_tup[0]
@@ -596,8 +616,8 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     model.addConstr(d_to_f_mat @ d == f_equi)
     model.addConstr(d_to_fh_mat @ d == f_h_equi)
     model.addConstr(d_to_fh_total_mat @ d == f_h_total_equi)
-    for d_idx in d_idx_dropped:
-        model.addConstr(d[d_idx] == 0)
+#    for d_idx in d_idx_dropped:
+#        model.addConstr(d[d_idx] == 0)
     for hour_idx in range(N_HOUR):
         density_expr = gp.LinExpr(0.0)
         for k in range(single_t_d_len):
