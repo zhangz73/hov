@@ -31,7 +31,7 @@ BPR_B = 0.7906
 DISTANCE = 7.16 # miles
 WINDOW_SIZE = 1 #15
 
-DELTA = 0.0625
+DELTA = 0.125
 num_grids = int(4 / DELTA)
 
 #BETA_RANGE_LST = [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)]
@@ -93,7 +93,7 @@ for col in data_cols:
     df[col] = df.groupby(["Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 #    df[col] = df.groupby(["Hour", "Segment"])[col].transform(lambda x: x.rolling(WINDOW_SIZE, center = False).mean())
 df = df[(df["Date"] >= "2021-02-01") & (df["Date"] <= "2021-05-31")]
-df = df[(df["Hour"] >= 15) & (df["Hour"] <= 18)]
+df = df[(df["Hour"] >= 15) & (df["Hour"] <= 17)]
 df = df.dropna()
 
 df_wide = df.pivot(index = ["Date", "Hour", "Minute"], columns = ["Segment"], values = ["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"])
@@ -419,7 +419,7 @@ def get_d_coef_matrix(sigma_ns_h, sigma_ns_o, meta_data = None, data_dct = None)
     ### Compute equilibrium flows
     ## TODO: Implement d_to_f_mat
     ### o + h
-    d_coef_matrix = np.zeros((2 * N_DATA, d_len))
+    d_coef_matrix = np.zeros((2 * N_DATA + 1, d_len))
     for hour_idx in tqdm(range(N_HOUR)):
         t = UNIQUE_HOUR_LST[hour_idx]
         relev_data_idx = np.where(HOUR_LST == t)[0]
@@ -433,6 +433,7 @@ def get_d_coef_matrix(sigma_ns_h, sigma_ns_o, meta_data = None, data_dct = None)
                             d_coef_matrix[relev_data_idx, hour_idx * single_t_d_len + d_idx] += 1 / (c + 1) * sigma_ns_o[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num * HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx]
                             d_coef_matrix[N_DATA + relev_data_idx, hour_idx * single_t_d_len + d_idx] += 1 / (c + 1) * sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], segment_idx, c, s].sum(axis = 1) / elem_num * HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx]
                     segment_idx += 1
+    d_coef_matrix[-1,:] = 1
     return d_coef_matrix
 
 def drop_dependent_columns(X, tol=1e-10):
