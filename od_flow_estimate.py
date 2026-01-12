@@ -159,7 +159,7 @@ def max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6):
     Max-entropy OD estimation with flow constraints enforced via L1 slacks.
 
     Problem:
-        max  sum_i (-d_i * log d_i) - penalty_weight * sum_r (s_r^+ + s_r^-)
+        max  sum_i (-d_i * log d_i - d_i) - penalty_weight * sum_r (s_r^+ + s_r^-)
         s.t. A_r * d + s_r^+ - s_r^- = target_r   for all rows r
              d_i >= min_flow
              s_r^+, s_r^- >= 0
@@ -215,7 +215,7 @@ def max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6):
     # ------------------------------
     entropy_expr = gp.LinExpr()
     for i in range(demand_len):
-        entropy_expr += - dvars[i] * logd[i]
+        entropy_expr += - dvars[i] * logd[i] - dvars[i]
 
     slack_penalty = penalty_weight * (s_pos.sum() + s_neg.sum())
 
@@ -266,7 +266,7 @@ def max_entropy_analytical():
 def bertsimas_n_yan():
     pass
 
-total_demand = max_entropy_analytical() #max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6) #
+total_demand = max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6) #
 hour_lst_ret = []
 origin_lst_ret = []
 dest_lst_ret = []
