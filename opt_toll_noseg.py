@@ -19,8 +19,8 @@ from tqdm import tqdm
 
 ## Script Options
 N_CPU = 1
-DENSITY_RECALIBRATE = True
-DENSITY_RETRAIN = True
+DENSITY_RECALIBRATE = False
+DENSITY_RETRAIN = False
 TRAIN_FRAC = 0.8#0.8
 
 ## Hyperparameters
@@ -167,7 +167,7 @@ for hour_idx in range(N_HOUR):
         origin_seg = segment_lst[s_o]
         for s_d in range(s_o, S):
             dest_seg = segment_lst[s_d]
-            HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] = df_od_demand[(df_od_demand["Hour"] == hour) & (df_od_demand["Origin"] == origin_seg) & (df_od_demand["Destination"] == dest_seg)].iloc[0]["Demand"] / 12
+            HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] = df_od_demand[(df_od_demand["Hour"] == hour) & (df_od_demand["Origin"] == origin_seg) & (df_od_demand["Destination"] == dest_seg)].iloc[0]["Demand"] #/ 12
             segment_idx += 1
 ###
 #N_DATES = len(df["Date"].unique())
@@ -774,15 +774,7 @@ def get_segment_pop(density, hour_idx):
     return segment_pop
 
 def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, hour_idx = 12, num_itr = 10, lam = 0.5, schedule_lst = [], eta = 1):
-    if meta_data is not None:
-        N_HOUR = meta_data["N_HOUR"]
-        S = meta_data["S"]
-        C = meta_data["C"]
-        segment_type_num = meta_data["segment_type_num"]
-        BETA_RANGE_LST = meta_data["BETA_RANGE_LST"]
-        GAMMA_RANGE_DCT = meta_data["GAMMA_RANGE_DCT"]
-        HOUR_OD_DEMAND = meta_data["HOUR_OD_DEMAND"]
-        DISTANCE_ARR = meta_data["DISTANCE_ARR"]
+    global DISTANCE_ARR
     ### Get grid
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid(beta_range_lst = BETA_RANGE_LST, gamma_range_dct = GAMMA_RANGE_DCT)
     single_t_d_len = len(d_idx_start_lst) - 1
@@ -838,19 +830,18 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
                 o_idx_lst = np.arange(begin, seg_end, S * 2)
                 h_idx_lst = o_idx_lst + 1
                 if segment_density_lst[segment_type_idx] > 1:
-                    segment_type_strategy[o_idx_lst] = 1 / (segment_len_lst[segment_type_idx] * C * 2)
-                    segment_type_strategy[h_idx_lst] = 1 / (segment_len_lst[segment_type_idx] * C * 2)
-                    if density_sum > 1:
+                    segment_type_strategy[o_idx_lst] = 1 / (C * 2) #1 / (segment_len_lst[segment_type_idx] * C * 2)
+                    segment_type_strategy[h_idx_lst] = 1 / (C * 2) #1 / (segment_len_lst[segment_type_idx] * C * 2)
+                    if density_sum > 0:
                         for d_idx in range(single_t_d_len):
-                            d_val = density[hour_idx * single_t_d_len + d_idx] #* HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
+                            d_val = density[hour_idx * single_t_d_len + d_idx]
                             elem_num = d_idx_start_lst[d_idx + 1] - d_idx_start_lst[d_idx]
                             equi_val = d_val / elem_num / density_sum / segment_len_lst[segment_type_idx]
                             equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],o_idx_lst] = equi_val
                             equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],h_idx_lst] = equi_val
-                            equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],o_idx_lst] = equi_val * density_sum
-                            equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],h_idx_lst] = equi_val * density_sum
+                            equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],o_idx_lst] = equi_val * density_sum * demand
+                            equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1],h_idx_lst] = equi_val * density_sum * demand
             segment_type_idx += 1
-#    print(equi_profile_to_strategy_density_vec.sum(), segment_type_strategy.sum())
     o_lanes = int(NUM_LANES * (1 - rho))
     h_lanes = NUM_LANES - o_lanes
     utility_cost_arr = []
@@ -860,7 +851,7 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
     segment_type_strategy_to_flow_o_map = torch.from_numpy(segment_type_strategy_to_flow_o_map)
     segment_type_strategy_to_flow_h_map = torch.from_numpy(segment_type_strategy_to_flow_h_map)
     segment_type_strategy = torch.from_numpy(segment_type_strategy).requires_grad_()
-    DISTANCE_ARR = torch.tensor(DISTANCE_ARR)
+    DISTANCE_ARR = torch.from_numpy(DISTANCE_ARR)
     beta_lst = torch.from_numpy(beta_lst)
     gamma_lst_c = torch.from_numpy(gamma_lst_c)
     tau_cs = torch.from_numpy(tau_cs)
@@ -879,23 +870,18 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
         sigma_s[:,1::2] += sigma_s_h.reshape((len(beta_lst), segment_type_strategy_len // 2))
         equi_profile = (equi_profile_to_strategy_density_vec * sigma_s).sum(dim = 0)
         ### Update the guess
-        ratio = 1 / segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1).repeat_interleave(C * S * 2)
-        EPS = 1e-3
-        seg_prob = torch.clip(segment_type_strategy * ratio / segment_type_num, EPS, 1 - EPS)
-        equi_prob = torch.clip(equi_profile / segment_type_num, EPS, 1 - EPS)
+#        ratio = 1 / segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1).repeat_interleave(C * S * 2)
+#        EPS = 1e-3
+#        seg_prob = torch.clip(segment_type_strategy * ratio / segment_type_num, EPS, 1 - EPS)
+#        equi_prob = torch.clip(equi_profile / segment_type_num, EPS, 1 - EPS)
         sq_loss = torch.sum((segment_type_strategy - equi_profile) ** 2)
-        loss = -torch.sum(seg_prob * torch.log(equi_prob) + (1 - seg_prob) * torch.log(1 - equi_prob))
-        const_loss = torch.mean((segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1) - 1) ** 2) * 100
+#        loss = -torch.sum(seg_prob * torch.log(equi_prob) + (1 - seg_prob) * torch.log(1 - equi_prob))
+#        const_loss = torch.mean((segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1) - 1) ** 2) * 100
         loss = sq_loss
-#        sq_loss += const_loss
-        sq_loss.backward()
 #        loss += const_loss
-#        loss.backward()
+        loss.backward()
         with torch.no_grad():
             segment_type_strategy -= lam * segment_type_strategy.grad
-#            ratio = 1 / segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1).repeat_interleave(C * S * 2)
-#            segment_type_strategy *= ratio
-#            print(segment_type_strategy.view((segment_type_num, -1)).sum(dim = 1))
         loss_arr.append(float(loss.data))
         segment_type_strategy.grad.zero_()
         if itr in schedule_lst:
@@ -904,15 +890,8 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
         latency_tmp[::2] = latency_o.detach().numpy()
         latency_tmp[1::2] = latency_h.detach().numpy()
         latency_lst = np.tile(latency_tmp, segment_type_num * C).reshape((1, segment_type_strategy_len))
-#        if itr > 0:
-#            total_utility_cost_prev = (equi_profile_dens * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
-#            equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
-#            total_utility_cost = (equi_profile_dens * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
-#            utility_cost_arr.append(total_utility_cost_prev - total_utility_cost)
-#        else:
-#            equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
-    print(segment_type_strategy.data)
-    print(equi_profile.data)
+#    print(segment_type_strategy.data)
+#    print(equi_profile.data)
     segment_type_strategy = segment_type_strategy.detach().numpy()
     sigma_s = sigma_s.detach().numpy()
     segment_type_strategy_to_flow_o_map = segment_type_strategy_to_flow_o_map.numpy()
@@ -941,22 +920,13 @@ def get_flow_from_toll_iterative(density, tau_cs, meta_data = None, rho = 0.25, 
     total_utility_cost = (equi_profile_pop * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
     flow_o_equi = flow_o
     flow_h_equi = segment_type_strategy_to_flow_h2_map @ segment_type_strategy
-    plt.plot(loss_arr)
-    plt.title(loss_arr[-1])
-    plt.show()
-    assert False
+#    plt.plot(loss_arr)
+#    plt.title(loss_arr[-1])
+#    plt.show()
+#    assert False
     return segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi
 
 def get_flow_from_toll_iterative_heuristic(density, tau_cs, meta_data = None, rho = 0.25, hour_idx = 12, num_itr = 10, lam = 0.5):
-    if meta_data is not None:
-        N_HOUR = meta_data["N_HOUR"]
-        S = meta_data["S"]
-        C = meta_data["C"]
-        segment_type_num = meta_data["segment_type_num"]
-        BETA_RANGE_LST = meta_data["BETA_RANGE_LST"]
-        GAMMA_RANGE_DCT = meta_data["GAMMA_RANGE_DCT"]
-        HOUR_OD_DEMAND = meta_data["HOUR_OD_DEMAND"]
-        DISTANCE_ARR = meta_data["DISTANCE_ARR"]
     ### Get grid
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid(beta_range_lst = BETA_RANGE_LST, gamma_range_dct = GAMMA_RANGE_DCT)
     single_t_d_len = len(d_idx_start_lst) - 1
@@ -976,9 +946,9 @@ def get_flow_from_toll_iterative_heuristic(density, tau_cs, meta_data = None, rh
     segment_len_lst = np.zeros(segment_type_num)
     for c in range(C):
         segment_type_idx = 0
-        demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
         for s_o in range(S):
             for s_d in range(s_o, S):
+                demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
                 col_idx_o_begin = segment_type_idx * C * S * 2 + c * S * 2 + s_o * 2
                 col_idx_o_end = segment_type_idx * C * S * 2 + c * S * 2 + (s_d + 1) * 2
                 col_idx_h_begin = col_idx_o_begin + 1
@@ -1082,9 +1052,6 @@ def get_flow_from_toll_iterative_heuristic(density, tau_cs, meta_data = None, rh
     total_utility_cost = (equi_profile_pop * (beta_lst.reshape((len(beta_lst), 1)) * latency_lst + tau_lst + gamma_lst_c_long)).sum()
     flow_o_equi = flow_o
     flow_h_equi = segment_type_strategy_to_flow_h2_map @ segment_type_strategy
-    plt.plot(loss_arr)
-    plt.show()
-    assert False
     return segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi
 
 def describe_segment_type_strategy(sigma, density, hour_idx, eps = 1e-3):
@@ -1124,7 +1091,7 @@ def toll_design_grid_search_single(tau_tup_lst, density, hour_idx = 12, tau_max 
         tau_cs[1,:] = tau_cs[0,:] / 4
         for rho in rho_lst:
             ### segment_type_num * C * S * 2
-            segment_type_strategy, loss_arr, latency_o, latency_h, total_travel_time, total_emission, total_revenue, total_utility_cost, _, _ = get_flow_from_toll_iterative(density, tau_cs = tau_cs, rho = rho, hour_idx = hour_idx, num_itr = num_itr, lam = lam)
+            segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, _, _ = get_flow_from_toll_iterative(density, tau_cs = tau_cs, rho = rho, hour_idx = hour_idx, num_itr = num_itr, lam = lam)
             ### Store results
             dct_results["Rho"].append(rho)
             dct_results["Loss"].append(loss_arr[-1])
@@ -1270,34 +1237,31 @@ if DENSITY_RECALIBRATE:
         np.save("density/preference_density_general.npy", density)
 else:
     density = np.load("density/preference_density_general.npy")
-describe_density(density)
+#describe_density(density)
 
-assert False
+#assert False
 
-segment_type_strategy, loss_arr, utility_cost_arr, latency_o, latency_h, total_travel_time, total_emission, total_revenue, total_utility_cost = get_flow_from_toll_iterative(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = 12, num_itr = 100, lam = 1e-1)
-#print(segment_type_strategy.round(3))
-#print(segment_type_strategy.sum())
-print(total_travel_time, total_emission, total_revenue, total_utility_cost)
-print("Final Loss:", loss_arr[-1])
-describe_segment_type_strategy(segment_type_strategy, density, hour_idx = 12, eps = 1e-2)
-
-plt.plot(loss_arr)
-#plt.yscale("log")
-plt.title(f"loss = {loss_arr[-1]:.2e}")
-plt.savefig("loss.png")
-plt.clf()
-plt.close()
-
-plt.plot(utility_cost_arr)
-#plt.yscale("log")
-plt.title(f"Utility Cost = {utility_cost_arr[-1]:.2e}")
-plt.savefig("utility_cost.png")
-plt.clf()
-plt.close()
+#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative(density, tau_cs = np.array([[2, 0.5, 0], [3, 0.75, 0], [3, 0.75, 0], [2, 0.5, 0], [2, 0.5, 0]]).T, rho = 0.25, hour_idx = 3, num_itr = 20, lam = 1e-1)
+##print(segment_type_strategy.round(3))
+##print(segment_type_strategy.sum())
+##print(total_travel_time, total_emission, total_revenue, total_utility_cost)
+##print("Final Loss:", loss_arr[-1])
+##print(flow_o_equi)
+##print(flow_h_equi)
+##describe_segment_type_strategy(segment_type_strategy, density, hour_idx = 3, eps = 1e-2)
+#
+#plt.plot(loss_arr)
+##plt.yscale("log")
+#plt.title(f"loss = {loss_arr[-1]:.2e}")
+#plt.savefig("loss.png")
+#plt.clf()
+#plt.close()
+#
+#assert False
 
 df_all = None
-for hour_idx in tqdm(range(15)):
-    df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 1, rho_lst = [0.25], num_itr = 300, lam = 1e-2)
+for hour_idx in tqdm(range(4)):
+    df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 1, rho_lst = [0.25], num_itr = 20, lam = 1e-1)
     df["Hour"] = hour_idx + 5
     if df_all is None:
         df_all = df
