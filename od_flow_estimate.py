@@ -157,6 +157,7 @@ for hour_idx in range(N_HOURS):
 def max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6):
     """
     Max-entropy OD estimation with flow constraints enforced via L1 slacks.
+    Reference: "The most likely trip matrix estimated from traffic counts", Henk J. Van Zuylen, Luis G. Willumsen
 
     Problem:
         max  sum_i (-d_i * log d_i - d_i) - penalty_weight * sum_r (s_r^+ + s_r^-)
