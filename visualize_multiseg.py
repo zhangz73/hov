@@ -54,7 +54,7 @@ def plot_improvement(hour_lst, improvement_pct_lst, improvement_value_lst, goal,
     plt.clf()
     plt.close()
 
-N_HOURS = 15
+N_HOURS = 4
 value_dct = {"congestion_current": np.zeros(N_HOURS), "congestion_best": np.zeros(N_HOURS), "emission_current": np.zeros(N_HOURS), "emission_best": np.zeros(N_HOURS), "revenue_current": np.zeros(N_HOURS), "revenue_best": np.zeros(N_HOURS), "utility_cost_current": np.zeros(N_HOURS), "utility_cost_best": np.zeros(N_HOURS)}
 for segment_idx in range(len(SEGMENT_LST)):
     segment = SEGMENT_LST[segment_idx]

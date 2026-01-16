@@ -982,10 +982,10 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
                 seg_end = (segment_type_idx + 1) * C * S * 2
                 o_idx_lst = np.arange(begin, seg_end, S * 2)
                 h_idx_lst = o_idx_lst + 1
-                if segment_density_lst[segment_type_idx] > 1:
+                if segment_density_lst[segment_type_idx] > 0:
                     segment_type_strategy[o_idx_lst] = 1 / (segment_len_lst[segment_type_idx] * C * 2)
                     segment_type_strategy[h_idx_lst] = 1 / (segment_len_lst[segment_type_idx] * C * 2)
-                    if density_sum > 1:
+                    if density_sum > 0:
                         for d_idx in range(single_t_d_len):
                             d_val = density[hour_idx * single_t_d_len + d_idx] #* HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
                             elem_num = d_idx_start_lst[d_idx + 1] - d_idx_start_lst[d_idx]
@@ -1244,14 +1244,15 @@ else:
 
 #assert False
 
-#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0]]).T, rho = 0.25, hour_idx = 3, num_itr = 10, lam = 1)
+#hour_idx = 0
+#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 10, lam = 1)
 #print(segment_type_strategy.round(3))
 #print(segment_type_strategy.sum())
 #print(total_travel_time, total_emission, total_revenue, total_utility_cost)
 #print("Final Loss:", loss_arr[-1])
 #print(flow_o_equi)
 #print(flow_h_equi)
-#describe_segment_type_strategy(segment_type_strategy, density, hour_idx = 3, eps = 1e-2)
+#describe_segment_type_strategy(segment_type_strategy, density, hour_idx = hour_idx, eps = 1e-2)
 #
 #plt.plot(loss_arr)
 ##plt.yscale("log")
