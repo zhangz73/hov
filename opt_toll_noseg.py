@@ -1032,6 +1032,8 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
             utility_cost_arr.append(total_utility_cost_prev - total_utility_cost)
         else:
             equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
+        if loss < 1e-9:
+            break
     flow_o = segment_type_strategy_to_flow_o_map @ segment_type_strategy
     flow_h = segment_type_strategy_to_flow_h_map @ segment_type_strategy
     latency_o = get_cost(flow_o / o_lanes, DISTANCE_ARR)
@@ -1263,7 +1265,7 @@ else:
 df_all = None
 for hour_idx in tqdm(range(4)):
     df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 0.5, rho_lst = [0.25], num_itr = 10, lam = 1)
-    df["Hour"] = hour_idx + 5
+    df["Hour"] = hour_idx + 14
     if df_all is None:
         df_all = df
     else:
