@@ -5,9 +5,10 @@ import matplotlib.dates as mdates
 import matplotlib.ticker as mtick
 
 TEST_BEGIN_DATE = "2021-05-07"
+SCHEME = "gamma3=2"
 
 ## Strategy profile
-df_strategy = pd.read_csv("tmp_ratio.csv")
+df_strategy = pd.read_csv(f"CalibrationResults/Flow/tmp_ratio_{SCHEME}.csv")
 df_strategy["Total"] = df_strategy["Equi 0"] + df_strategy["Equi 1"] + df_strategy["Equi 2"]
 for col in ["Equi 0", "Equi 1", "Equi 2", "Target 0", "Target 1", "Target 2"]:
     df_strategy[col] /= df_strategy["Total"]
@@ -26,12 +27,14 @@ plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
 plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
 plt.tight_layout()
-plt.savefig("DataVerification/daily_ratio.png")
+plt.savefig(f"CalibrationResults/Plots/daily_ratio_{SCHEME}.png")
+#plt.savefig("DataVerification/daily_ratio.png")
 plt.clf()
 plt.close()
 
+"""
 ## Calibrated flows v.s. actual flows
-df_flow = pd.read_csv("tmp.csv")
+df_flow = pd.read_csv(f"CalibrationResults/Flow/tmp_{SCHEME}.csv")
 df_flow = df_flow[df_flow["Flow Target"] > 0]
 df_flow["pct_diff"] = (df_flow["Flow Equi"] - df_flow["Flow Target"]) / df_flow["Flow Target"] * 100
 df_flow["abs_diff"] = (df_flow["Flow Equi"] - df_flow["Flow Target"])
@@ -41,7 +44,8 @@ plt.xlim(-100, 100)
 plt.xlabel("% Difference in equilibrium flow v.s. actual flows")
 plt.gca().xaxis.set_major_formatter(mtick.PercentFormatter())
 plt.tight_layout()
-plt.savefig(f"DataVerification/flow.png")
+plt.savefig(f"CalibrationResults/Plots/flow_{SCHEME}.png")
+#plt.savefig(f"DataVerification/flow.png")
 plt.clf()
 plt.close()
 for hour in df_flow["Hour"].unique():
@@ -77,3 +81,4 @@ plt.tight_layout()
 plt.savefig(f"DataVerification/flow_comp.png")
 plt.clf()
 plt.close()
+"""
