@@ -1003,6 +1003,8 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
     tau_lst[:,1::2] = np.tile(tau_cs.reshape(C * S), segment_type_num)
     gamma_lst_c_long = np.tile(gamma_lst_c.repeat(S * 2, axis = 1), reps = (1, segment_type_num))
     segment_type_strategy_prev = segment_type_strategy
+    segment_type_strategy_best = segment_type_strategy
+    loss_best = np.inf
     for itr in tqdm(range(num_itr), leave = False):
         ### Compute the corresponding latency
         segment_type_strategy_v = (segment_type_strategy + itr * segment_type_strategy_prev) / (itr + 1)
@@ -1021,6 +1023,9 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
         loss = np.mean((segment_type_strategy - equi_profile) ** 2)
         segment_type_strategy = segment_type_strategy * (1 - lam) + equi_profile * lam
         loss_arr.append(loss)
+        if loss < loss_best:
+            loss_best = loss
+            segment_type_strategy_best = segment_type_strategy
         latency_tmp = np.zeros(S * 2)
         latency_tmp[::2] = latency_o
         latency_tmp[1::2] = latency_h
@@ -1032,8 +1037,9 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
             utility_cost_arr.append(total_utility_cost_prev - total_utility_cost)
         else:
             equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
-        if loss < 1e-9:
+        if loss < 1e-5:
             break
+    segment_type_strategy = segment_type_strategy_best
     flow_o = segment_type_strategy_to_flow_o_map @ segment_type_strategy
     flow_h = segment_type_strategy_to_flow_h_map @ segment_type_strategy
     latency_o = get_cost(flow_o / o_lanes, DISTANCE_ARR)
@@ -1245,7 +1251,7 @@ else:
 #assert False
 
 #hour_idx = 0
-#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0], [1, 0.25, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 10, lam = 1)
+#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 50, lam = 1)
 #print(segment_type_strategy.round(3))
 #print(segment_type_strategy.sum())
 #print(total_travel_time, total_emission, total_revenue, total_utility_cost)
@@ -1256,7 +1262,7 @@ else:
 #
 #plt.plot(loss_arr)
 ##plt.yscale("log")
-#plt.title(f"loss = {loss_arr[-1]:.2e}")
+#plt.title(f"loss = {np.min(loss_arr):.2e}")
 #plt.savefig("loss.png")
 #plt.clf()
 #plt.close()
@@ -1265,7 +1271,7 @@ else:
 
 df_all = None
 for hour_idx in tqdm(range(4)):
-    df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 0.5, rho_lst = [0.25], num_itr = 10, lam = 1)
+    df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 0.5, rho_lst = [0.25], num_itr = 50, lam = 1)
     df["Hour"] = hour_idx + 14
     if df_all is None:
         df_all = df

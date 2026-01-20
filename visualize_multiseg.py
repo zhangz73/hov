@@ -75,7 +75,7 @@ for segment_idx in range(len(SEGMENT_LST)):
     utility_cost_improvement_pct_lst = []
     utility_cost_improvement_value_lst = []
     for hour_idx in range(N_HOURS):
-        hour = 5 + hour_idx
+        hour = 14 + hour_idx
         hour_lst.append(hour)
         df_design_curr = df_design[df_design["Hour"] == hour]
         min_congestion_toll = df_design_curr[df_design_curr["Total Travel Time"] == df_design_curr["Total Travel Time"].min()].iloc[0][f"Toll {segment_idx}"]
