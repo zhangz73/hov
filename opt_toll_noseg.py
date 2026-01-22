@@ -9,6 +9,8 @@ import scipy
 from scipy import optimize
 from scipy.stats import multivariate_normal
 from scipy.sparse import csr_matrix, csr_array, dia_matrix, vstack
+from pyomo.environ import ConcreteModel, Var, RangeSet, Constraint, Expression, SolverFactory, value
+from pyomo.mpec import Complementarity, complements
 import gurobipy as gp
 from gurobipy import GRB
 import matplotlib.pyplot as plt
@@ -1063,6 +1065,307 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
     flow_h_equi = segment_type_strategy_to_flow_h2_map @ segment_type_strategy
     return segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi
 
+def get_flow_from_toll_pyomo_path(
+    density, tau_cs, meta_data=None, rho=0.25, hour_idx=12,
+    path_solver_name="pathampl", tee=True
+):
+    ### The PATH Solver: A Non-Monotone Stabilization Scheme for Mixed Complementarity Problems, Dirkse & Ferris
+
+    # ----------------------------
+    # Your existing preprocessing
+    # ----------------------------
+    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid(
+        beta_range_lst=BETA_RANGE_LST, gamma_range_dct=GAMMA_RANGE_DCT
+    )
+    single_t_d_len = len(d_idx_start_lst) - 1
+    n_grids = len(beta_lst)
+
+    segment_type_num = int(S * (S + 1) / 2)
+    segment_type_strategy_len = segment_type_num * C * S * 2
+
+    segment_type_strategy_to_flow_o_map = np.zeros((S, segment_type_strategy_len))
+    segment_type_strategy_to_flow_h_map = np.zeros((S, segment_type_strategy_len))
+    segment_type_strategy_to_flow_h2_map = np.zeros((S * C, segment_type_strategy_len))
+    segment_type_strategy_to_agents_o_map = np.zeros((S, segment_type_strategy_len))
+    segment_type_strategy_to_agents_h_map = np.zeros((S, segment_type_strategy_len))
+    equi_profile_to_strategy_density_vec = np.zeros((n_grids, segment_type_strategy_len))
+    equi_profile_to_strategy_pop_vec = np.zeros((n_grids, segment_type_strategy_len))
+    segment_len_lst = np.zeros(segment_type_num)
+
+    for c in range(C):
+        segment_type_idx = 0
+        for s_o in range(S):
+            for s_d in range(s_o, S):
+                demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
+                col_idx_o_begin = segment_type_idx * C * S * 2 + c * S * 2 + s_o * 2
+                col_idx_o_end   = segment_type_idx * C * S * 2 + c * S * 2 + (s_d + 1) * 2
+                col_idx_h_begin = col_idx_o_begin + 1
+                col_idx_h_end   = col_idx_o_end + 1
+
+                segment_type_strategy_to_flow_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] = (1/(c+1)) * demand
+                segment_type_strategy_to_flow_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] = (1/(c+1)) * demand
+                segment_type_strategy_to_flow_h2_map[(s_o*C + c):((s_d+1)*C + c):C, col_idx_h_begin:col_idx_h_end:2] = (1/(c+1)) * demand
+
+                segment_type_strategy_to_agents_o_map[s_o:(s_d+1), col_idx_o_begin:col_idx_o_end:2] = demand
+                segment_type_strategy_to_agents_h_map[s_o:(s_d+1), col_idx_h_begin:col_idx_h_end:2] = demand
+
+                segment_len_lst[segment_type_idx] = s_d + 1 - s_o
+                segment_type_idx += 1
+
+    # Build density/pop mapping vectors (same as your original)
+    segment_density_lst = np.zeros(segment_type_num)
+    segment_type_idx = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_type_idx]
+            density_sum = density[(hour_idx * single_t_d_len):((hour_idx + 1) * single_t_d_len)].sum()
+            segment_density_lst[segment_type_idx] = density_sum
+
+            seg_start = segment_type_idx * C * S * 2
+            seg_end = (segment_type_idx + 1) * C * S * 2
+
+            if density_sum > 0:
+                for s in range(s_o, s_d + 1):
+                    begin = seg_start + s * 2
+                    o_idx_lst = np.arange(begin, seg_end, S * 2)  # across c
+                    h_idx_lst = o_idx_lst + 1
+
+                    for d_idx in range(single_t_d_len):
+                        d_val = density[hour_idx * single_t_d_len + d_idx]
+                        elem_num = d_idx_start_lst[d_idx + 1] - d_idx_start_lst[d_idx]
+                        equi_val = d_val / elem_num / density_sum / segment_len_lst[segment_type_idx]
+
+                        equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], o_idx_lst] = equi_val
+                        equi_profile_to_strategy_density_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], h_idx_lst] = equi_val
+
+                        equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], o_idx_lst] = equi_val * density_sum * demand
+                        equi_profile_to_strategy_pop_vec[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], h_idx_lst] = equi_val * density_sum * demand
+            segment_type_idx += 1
+
+    o_lanes = int(NUM_LANES * (1 - rho))
+    h_lanes = NUM_LANES - o_lanes
+
+    # Toll aligned with (segment_type, c, s, lane)
+    # k = p*C*S*2 + c*S*2 + s*2 + lane(0=o,1=h)
+    tau_vec = np.zeros(segment_type_strategy_len)
+    tau_flat = tau_cs.reshape(C * S)  # (c,s) flattened
+    tau_vec[1::2] = np.tile(tau_flat, segment_type_num)
+
+    # gamma: shape (n_grids, C)
+    # Your original gamma_lst_c seems shaped (n_grids, C) (or compatible)
+    gamma_tc = gamma_lst_c  # expect shape (n_grids, C)
+
+    # ----------------------------
+    # Helper: decode indices
+    # ----------------------------
+    # segment type p <-> (s_o, s_d)
+    p_to_od = []
+    segment_type_idx = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            p_to_od.append((s_o, s_d))
+            segment_type_idx += 1
+
+    def k_of(p, c, s, lane):  # lane: 0=o,1=h
+        return p * C * S * 2 + c * S * 2 + s * 2 + lane
+
+    # ----------------------------
+    # Pyomo MCP model (PATH)
+    # ----------------------------
+    m = ConcreteModel()
+    m.T = RangeSet(0, n_grids - 1)       # beta grid index
+    m.P = RangeSet(0, segment_type_num - 1)  # segment type index
+    m.CC = RangeSet(0, C - 1)            # occupancy index (0..C-1)
+    m.SEG = RangeSet(0, S - 1)           # segment index
+
+    # Lane-choice: h[t,c,s] in [0,1] = HOT share on segment s for occupancy c
+    m.h = Var(m.T, m.CC, m.SEG, bounds=(0.0, 1.0))
+
+    # Occupancy-choice: y[t,p,c] in [0,1], sum_c y = 1 for each (t,p)
+    m.y = Var(m.T, m.P, m.CC, bounds=(0.0, 1.0))
+    m.pi = Var(m.T, m.P)  # minimum total cost for (t,p), free var
+
+    def y_sum_rule(mm, t, p):
+        return sum(mm.y[t, p, c] for c in range(C)) == 1.0
+    m.y_sum = Constraint(m.T, m.P, rule=y_sum_rule)
+
+    # Aggregate strategy coordinate x[k] = sum_t w[t,k] * sigma[t,k]
+    w = equi_profile_to_strategy_density_vec  # (T,K)
+    A_o = segment_type_strategy_to_flow_o_map
+    A_h = segment_type_strategy_to_flow_h_map
+
+    # Build sigma[t,k] implicitly via y and h:
+    # sigma_o = y * (1-h), sigma_h = y * h, but only matters where w[t,k] != 0.
+    def sigma_expr(mm, t, k):
+        # decode k -> (p,c,s,lane)
+        lane = k % 2
+        tmp = k // 2
+        s = tmp % S
+        tmp //= S
+        c = tmp % C
+        p = tmp // C
+
+        if lane == 0:
+            return mm.y[t, p, c] * (1.0 - mm.h[t, c, s])
+        else:
+            return mm.y[t, p, c] * mm.h[t, c, s]
+
+#    m.x = Expression(
+#        RangeSet(0, segment_type_strategy_len - 1),
+#        rule=lambda mm, k: sum(w[t, k] * sigma_expr(mm, t, k) for t in range(n_grids))
+#    )
+    m.K = RangeSet(0, segment_type_strategy_len - 1)
+
+    wk_index = []
+    wk_value = []
+    for k in range(segment_type_strategy_len):
+        nz_t = np.nonzero(w[:, k])[0]
+        wk_index.append(nz_t.tolist())
+        wk_value.append(w[nz_t, k].tolist())
+
+    def x_rule(mm, k):
+        Ts = wk_index[k]
+        Ws = wk_value[k]
+        if not Ts:
+            return 0.0
+        return sum(Ws[i] * sigma_expr(mm, Ts[i], k) for i in range(len(Ts)))
+
+    m.x = Expression(m.K, rule=x_rule)
+
+    # Segment flows from x via your linear maps
+    m.flow_o = Expression(m.SEG, rule=lambda mm, s: sum(A_o[s, k] * mm.x[k] for k in range(segment_type_strategy_len)))
+    m.flow_h = Expression(m.SEG, rule=lambda mm, s: sum(A_h[s, k] * mm.x[k] for k in range(segment_type_strategy_len)))
+
+    # Latency: your BPR-like algebraic cost is Pyomo-safe
+    def get_cost_pyomo(flow, distance, bpr_a=BPR_A, bpr_b=BPR_B, bpr_power=BPR_POWER):
+        return ((bpr_a * flow) ** bpr_power + bpr_b) * distance
+
+    m.lat_o = Expression(m.SEG, rule=lambda mm, s: get_cost_pyomo(mm.flow_o[s] / o_lanes, DISTANCE_ARR[s]))
+    m.lat_h = Expression(m.SEG, rule=lambda mm, s: get_cost_pyomo(mm.flow_h[s] / h_lanes, DISTANCE_ARR[s]))
+
+    # Lane-choice complementarity for each (t,c,s):
+    # cost_o = beta * lat_o
+    # cost_h = beta * lat_h + gamma[t,c] + tau[c,s]
+    # 0 <= h ⟂ (cost_o - cost_h) >= 0    (choose HOT if cheaper)
+    # 0 <= (1-h) ⟂ (cost_h - cost_o) >= 0
+    m.comp_h = Complementarity(m.T, m.CC, m.SEG)
+    m.comp_o = Complementarity(m.T, m.CC, m.SEG)
+
+    def tau_cs_const(c, s):
+        return float(tau_cs[c, s])
+
+    def comp_hot_rule(mm, t, c, s):
+        Co = float(beta_lst[t]) * mm.lat_o[s]
+        Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s)
+        return complements(mm.h[t, c, s] >= 0, (Co - Ch) >= 0)
+
+    def comp_ord_rule(mm, t, c, s):
+        Co = float(beta_lst[t]) * mm.lat_o[s]
+        Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s)
+        return complements((1.0 - mm.h[t, c, s]) >= 0, (Ch - Co) >= 0)
+
+    m.comp_h = Complementarity(m.T, m.CC, m.SEG, rule=comp_hot_rule)
+    m.comp_o = Complementarity(m.T, m.CC, m.SEG, rule=comp_ord_rule)
+
+    # Total cost for occupancy c on segment-type p (sum over segments in [s_o:s_d] of min-cost via h)
+    # z = h*Ch + (1-h)*Co  (equals min at solution due to complementarity)
+    def tot_cost(mm, t, p, c):
+        s_o, s_d = p_to_od[p]
+        expr = 0
+        for s in range(s_o, s_d + 1):
+            Co = float(beta_lst[t]) * mm.lat_o[s]
+            Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s)
+            expr += mm.h[t, c, s] * Ch + (1.0 - mm.h[t, c, s]) * Co
+        return expr
+
+    # Occupancy-choice complementarity:
+    # y[t,p,c] > 0 => TotCost(t,p,c) = pi[t,p] (minimum)
+    # y[t,p,c] = 0 => TotCost(t,p,c) >= pi[t,p]
+    m.comp_occ = Complementarity(m.T, m.P, m.CC)
+
+    def comp_occ_rule(mm, t, p, c):
+        return complements(mm.y[t, p, c] >= 0, (tot_cost(mm, t, p, c) - mm.pi[t, p]) >= 0)
+
+    m.comp_occ = Complementarity(m.T, m.P, m.CC, rule=comp_occ_rule)
+
+    # ----------------------------
+    # Solve with PATH
+    # ----------------------------
+    solver = SolverFactory(path_solver_name)  # try "pathampl" if "path" not found
+    solver.options["convergence_tolerance"] = 1e-4
+    solver.options["major_iteration_limit"] = 100
+    solver.options["minor_iteration_limit"] = 1000
+    res = solver.solve(m, tee=tee)
+
+    # ----------------------------
+    # Recover equilibrium strategy vector (segment_type_strategy)
+    # ----------------------------
+    sigma_np = np.zeros((n_grids, segment_type_strategy_len))
+    for t in range(n_grids):
+        for k in range(segment_type_strategy_len):
+            # rebuild sigma using solved y,h
+            lane = k % 2
+            tmp = k // 2
+            s = tmp % S
+            tmp //= S
+            c = tmp % C
+            p = tmp // C
+
+            y_val = value(m.y[t, p, c])
+            h_val = value(m.h[t, c, s])
+            sigma_np[t, k] = y_val * (h_val if lane == 1 else (1.0 - h_val))
+
+    segment_type_strategy = (equi_profile_to_strategy_density_vec * sigma_np).sum(axis=0)
+
+    # ----------------------------
+    # Post-processing: same outputs as before
+    # ----------------------------
+    flow_o = segment_type_strategy_to_flow_o_map @ segment_type_strategy
+    flow_h = segment_type_strategy_to_flow_h_map @ segment_type_strategy
+
+    latency_o = get_cost(flow_o / o_lanes, DISTANCE_ARR)
+    latency_h = get_cost(flow_h / h_lanes, DISTANCE_ARR)
+
+    equi_profile_pop = equi_profile_to_strategy_pop_vec * sigma_np
+    agents_o = segment_type_strategy_to_agents_o_map @ segment_type_strategy
+    agents_h = segment_type_strategy_to_agents_h_map @ segment_type_strategy
+    total_travel_time = (agents_o * latency_o + agents_h * latency_h).sum()
+    total_emission = (flow_o * latency_o + flow_h * latency_h).sum()
+
+    # revenue: only HOT entries pay tau, aligned in tau_vec
+    total_revenue = (equi_profile_pop * tau_vec.reshape(1, -1)).sum()
+
+    # utility cost (matching your previous expression style)
+    # build latency_lst aligned to K
+    latency_tmp = np.zeros(S * 2)
+    latency_tmp[::2] = latency_o
+    latency_tmp[1::2] = latency_h
+    latency_lst = np.tile(latency_tmp, segment_type_num * C).reshape((1, segment_type_strategy_len))
+
+    gamma_long = np.zeros((n_grids, segment_type_strategy_len))
+    for t in range(n_grids):
+        for p in range(segment_type_num):
+            for c in range(C):
+                for s in range(S):
+                    gamma_long[t, k_of(p, c, s, 1)] = gamma_tc[t, c]  # gamma only on HOT, as in your code
+
+    total_utility_cost = (
+        equi_profile_pop * (beta_lst.reshape((n_grids, 1)) * latency_lst + tau_vec.reshape(1, -1) + gamma_long)
+    ).sum()
+
+    flow_o_equi = flow_o
+    flow_h_equi = segment_type_strategy_to_flow_h2_map @ segment_type_strategy
+
+    # PATH gives equilibrium directly; no Mann iteration curves
+    loss_arr = []
+    utility_cost_arr = []
+
+    return (
+        segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr,
+        total_travel_time, total_emission, total_revenue, total_utility_cost,
+        flow_o_equi, flow_h_equi
+    )
+
 def describe_segment_type_strategy(sigma, density, hour_idx, eps = 1e-3):
     beta_lst, gamma_lst_c, d_idx_start_lst = get_grid()
     single_t_d_len = len(d_idx_start_lst) - 1
@@ -1250,24 +1553,25 @@ else:
 
 #assert False
 
-#hour_idx = 0
+hour_idx = 0
 #segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 50, lam = 1)
-#print(segment_type_strategy.round(3))
-#print(segment_type_strategy.sum())
-#print(total_travel_time, total_emission, total_revenue, total_utility_cost)
-#print("Final Loss:", loss_arr[-1])
-#print(flow_o_equi)
-#print(flow_h_equi)
-#describe_segment_type_strategy(segment_type_strategy, density, hour_idx = hour_idx, eps = 1e-2)
-#
-#plt.plot(loss_arr)
-##plt.yscale("log")
-#plt.title(f"loss = {np.min(loss_arr):.2e}")
-#plt.savefig("loss.png")
-#plt.clf()
-#plt.close()
-#
-#assert False
+segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_pyomo_path(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx)
+print(segment_type_strategy.round(3))
+print(segment_type_strategy.sum())
+print(total_travel_time, total_emission, total_revenue, total_utility_cost)
+print("Final Loss:", loss_arr[-1])
+print(flow_o_equi)
+print(flow_h_equi)
+describe_segment_type_strategy(segment_type_strategy, density, hour_idx = hour_idx, eps = 1e-2)
+
+plt.plot(loss_arr)
+#plt.yscale("log")
+plt.title(f"loss = {np.min(loss_arr):.2e}")
+plt.savefig("loss.png")
+plt.clf()
+plt.close()
+
+assert False
 
 df_all = None
 for hour_idx in tqdm(range(4)):
