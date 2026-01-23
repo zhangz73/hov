@@ -1065,6 +1065,306 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
     flow_h_equi = segment_type_strategy_to_flow_h2_map @ segment_type_strategy
     return segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi
 
+# ---------- helpers: simplex + scaled simplex ----------
+def proj_simplex(v, z=1.0):
+    """
+    Euclidean projection of v onto {x>=0, sum x = z}.
+    """
+    if z <= 0:
+        return np.zeros_like(v)
+    u = np.sort(v)[::-1]
+    cssv = np.cumsum(u) - z
+    ind = np.arange(1, len(v) + 1)
+    cond = u - cssv / ind > 0
+    if not np.any(cond):
+        # all projected to zero except distribute mass equally
+        return np.full_like(v, z / len(v))
+    rho = np.where(cond)[0][-1]
+    theta = cssv[rho] / (rho + 1.0)
+    return np.maximum(v - theta, 0.0)
+
+def proj_blocks_scaled_simplex(x, blocks, block_sums):
+    """
+    Project x onto product of scaled simplexes:
+      for each block b: x[blocks[b]] >=0 and sum = block_sums[b]
+    """
+    y = x.copy()
+    for b, idx in enumerate(blocks):
+        y[idx] = proj_simplex(y[idx], z=block_sums[b])
+    return y
+
+# ---------- helper: halfspace projection ----------
+def proj_halfspace(x, g, z):
+    """
+    Project x onto H = {u | <g, u - z> <= 0}.
+    If already feasible, return x.
+    """
+    denom = float(np.dot(g, g))
+    if denom <= 1e-30:
+        return x
+    viol = float(np.dot(g, x - z))
+    if viol <= 0.0:
+        return x
+    return x - (viol / denom) * g
+
+# ---------- helper: Dykstra for intersection of two sets (C and one halfspace H) ----------
+def proj_intersection_C_halfspace_dykstra(x0, projC, g, z, max_iter=200, tol=1e-10):
+    """
+    Dykstra's algorithm for projection onto C ∩ H.
+    C: convex set with projector projC(·)
+    H: halfspace defined by g,z as <g, u-z> <= 0
+    """
+    x = x0.copy()
+    p = np.zeros_like(x0)  # correction for C
+    q = np.zeros_like(x0)  # correction for H
+    for _ in range(max_iter):
+        x_old = x
+
+        # project onto C
+        y = projC(x + p)
+        p = x + p - y
+
+        # project onto H
+        x = proj_halfspace(y + q, g=g, z=z)
+        q = y + q - x
+
+        if np.linalg.norm(x - x_old) <= tol * max(1.0, np.linalg.norm(x_old)):
+            break
+    return x
+
+# ============================================================
+# Algorithm 2.1 (Solodov–Svaiter) specialized to your operator
+# ============================================================
+def get_flow_from_toll_solodov_svaiter(
+    density, tau_cs, meta_data=None,
+    rho=0.25, hour_idx=12,
+    max_iter=50,
+    gamma=0.5, sigma_ls=0.3,              # paper uses gamma,sigma in (0,1)
+    dykstra_max_iter=200, dykstra_tol=1e-10,
+    stop_tol=1e-6,
+    verbose=False
+):
+    """
+    Implements Solodov–Svaiter Algorithm 2.1 (SIAM J Control Optim 1999),
+    using F(x)=x - T(x), where T(x) is your best-response equilibrium profile mapping.
+
+    Returns the same tuple as get_flow_from_toll_iterative_mann:
+      (segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr,
+       total_travel_time, total_emission, total_revenue, total_utility_cost,
+       flow_o_equi, flow_h_equi)
+    """
+    # ----------------------------
+    # Reuse your preprocessing (mostly copied from Mann)
+    # ----------------------------
+    beta_lst, gamma_lst_c, d_idx_start_lst = get_grid(
+        beta_range_lst=BETA_RANGE_LST, gamma_range_dct=GAMMA_RANGE_DCT
+    )
+    single_t_d_len = len(d_idx_start_lst) - 1
+    n_grids = len(beta_lst)
+
+    segment_type_num = int(S * (S + 1) / 2)
+    segment_type_strategy_len = segment_type_num * C * S * 2
+
+    A_o = np.zeros((S, segment_type_strategy_len))
+    A_h = np.zeros((S, segment_type_strategy_len))
+    A_h2 = np.zeros((S * C, segment_type_strategy_len))
+    A_agents_o = np.zeros((S, segment_type_strategy_len))
+    A_agents_h = np.zeros((S, segment_type_strategy_len))
+    W_dens = np.zeros((n_grids, segment_type_strategy_len))
+    W_pop  = np.zeros((n_grids, segment_type_strategy_len))
+    segment_len_lst = np.zeros(segment_type_num)
+
+    # mapping (p -> (s_o,s_d)) and helper for k index
+    p_to_od = []
+    segtype_idx = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            p_to_od.append((s_o, s_d))
+            segtype_idx += 1
+
+    def k_of(p, c, s, lane):  # lane 0=o, 1=h
+        return p * C * S * 2 + c * S * 2 + s * 2 + lane
+
+    # build linear maps
+    for c in range(C):
+        p = 0
+        for s_o in range(S):
+            for s_d in range(s_o, S):
+                demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + p]
+                col_o_begin = p * C * S * 2 + c * S * 2 + s_o * 2
+                col_o_end   = p * C * S * 2 + c * S * 2 + (s_d + 1) * 2
+                col_h_begin = col_o_begin + 1
+                col_h_end   = col_o_end + 1
+
+                A_o[s_o:(s_d+1), col_o_begin:col_o_end:2] = (1/(c+1)) * demand
+                A_h[s_o:(s_d+1), col_h_begin:col_h_end:2] = (1/(c+1)) * demand
+                A_h2[(s_o*C + c):((s_d+1)*C + c):C, col_h_begin:col_h_end:2] = (1/(c+1)) * demand
+
+                A_agents_o[s_o:(s_d+1), col_o_begin:col_o_end:2] = demand
+                A_agents_h[s_o:(s_d+1), col_h_begin:col_h_end:2] = demand
+
+                segment_len_lst[p] = (s_d + 1 - s_o)
+                p += 1
+
+    # build W_dens, W_pop (same as Mann)
+    segment_density_lst = np.zeros(segment_type_num)
+    p = 0
+    for s_o in range(S):
+        for s_d in range(s_o, S):
+            demand = HOUR_OD_DEMAND[hour_idx * segment_type_num + p]
+            density_sum = density[(hour_idx * single_t_d_len):((hour_idx + 1) * single_t_d_len)].sum()
+            segment_density_lst[p] = density_sum
+            seg_start = p * C * S * 2
+            seg_end = (p + 1) * C * S * 2
+
+            if density_sum > 0:
+                for s in range(s_o, s_d + 1):
+                    begin = seg_start + s * 2
+                    o_idx_lst = np.arange(begin, seg_end, S * 2)
+                    h_idx_lst = o_idx_lst + 1
+                    for d_idx in range(single_t_d_len):
+                        d_val = density[hour_idx * single_t_d_len + d_idx]
+                        elem_num = d_idx_start_lst[d_idx + 1] - d_idx_start_lst[d_idx]
+                        equi_val = d_val / elem_num / density_sum / segment_len_lst[p]
+                        W_dens[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], o_idx_lst] = equi_val
+                        W_dens[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], h_idx_lst] = equi_val
+                        W_pop[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], o_idx_lst] = equi_val * density_sum * demand
+                        W_pop[d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx+1], h_idx_lst] = equi_val * density_sum * demand
+            p += 1
+
+    # lanes
+    o_lanes = int(NUM_LANES * (1 - rho))
+    h_lanes = NUM_LANES - o_lanes
+
+    # toll and gamma long (for utility cost)
+    tau_vec = np.zeros(segment_type_strategy_len)
+    tau_vec[1::2] = np.tile(tau_cs.reshape(C * S), segment_type_num)
+
+    gamma_long = np.tile(gamma_lst_c.repeat(S * 2, axis=1), reps=(1, segment_type_num))  # (n_grids, K)
+
+    # ----------------------------
+    # Define feasible set C for x (segment_type_strategy):
+    # For each (p,s) that belongs to OD range, the 2C entries sum to 1/segment_len[p].
+    # We'll project x blockwise onto scaled simplexes.
+    # ----------------------------
+    blocks = []
+    block_sums = []
+    for p, (s_o, s_d) in enumerate(p_to_od):
+        scale = 1.0 / segment_len_lst[p]
+        for s in range(s_o, s_d + 1):
+            idx = []
+            for c in range(C):
+                idx.append(k_of(p, c, s, 0))
+                idx.append(k_of(p, c, s, 1))
+            blocks.append(np.array(idx, dtype=int))
+            block_sums.append(scale)
+    block_sums = np.array(block_sums, dtype=float)
+
+    def projC(x):
+        return proj_blocks_scaled_simplex(x, blocks, block_sums)
+
+    # ----------------------------
+    # Define T(x): your equilibrium profile map
+    # and F(x)=x-T(x)
+    # ----------------------------
+    def T_map(x):
+        flow_o = A_o @ x
+        flow_h = A_h @ x
+        lat_o = get_cost(flow_o / o_lanes, DISTANCE_ARR)
+        lat_h = get_cost(flow_h / h_lanes, DISTANCE_ARR)
+
+        sigma_h, sigma_o = solve_sigma_given_parameters_vec(beta_lst, gamma_lst_c, lat_o, lat_h, tau_cs)
+        sigma = np.zeros((n_grids, segment_type_strategy_len))
+        sigma[:, ::2] = sigma_o.reshape((n_grids, segment_type_strategy_len // 2))
+        sigma[:, 1::2] = sigma_h.reshape((n_grids, segment_type_strategy_len // 2))
+
+        equi_profile = (W_dens * sigma).sum(axis=0)  # T(x)
+        return equi_profile, lat_o, lat_h, sigma
+
+    # initialize x in C (same style as Mann: project a uniform guess)
+    x = np.zeros(segment_type_strategy_len)
+    # uniform within each valid (p,s) block
+    for b, idx in enumerate(blocks):
+        x[idx] = block_sums[b] / len(idx)
+    x = projC(x)
+
+    loss_arr = []
+    utility_cost_arr = []
+
+    # ----------------------------
+    # Solodov–Svaiter Algorithm 2.1 loop
+    # (uses linesearch inequality (2.1) and x^{i+1}=P_{C∩H_i}(x^i)) :contentReference[oaicite:2]{index=2}
+    # ----------------------------
+    for it in tqdm(range(max_iter), disable=not verbose, leave = False):
+        Tx, lat_o, lat_h, sigma = T_map(x)
+        r = x - Tx
+        rr = float(np.dot(r, r))
+        loss = float(np.mean((r) ** 2))
+        loss_arr.append(loss)
+
+        if np.sqrt(rr) <= stop_tol:
+            break
+
+        # linesearch for eta = gamma^k such that <F(x - eta r), r> >= sigma ||r||^2
+        # Here F(u)=u-T(u)
+        eta = 1.0
+        while True:
+            z = x - eta * r
+            z = projC(z)  # ensure z in C (convex comb should already be, but safe numerically)
+            Tz, _, _, _ = T_map(z)
+            Fz = z - Tz
+            if float(np.dot(Fz, r)) >= sigma_ls * rr:
+                break
+            eta *= gamma
+            if eta < 1e-3:#1e-12:
+                # give up on aggressive linesearch; accept tiny step
+                break
+
+        # Halfspace H: <F(z), u - z> <= 0, then x_{next} = P_{C∩H}(x) :contentReference[oaicite:3]{index=3}
+        g = Fz
+        x_next = proj_intersection_C_halfspace_dykstra(
+            x, projC=projC, g=g, z=z, max_iter=dykstra_max_iter, tol=dykstra_tol
+        )
+
+        x = x_next
+
+    # final evaluation for outputs
+    Tx, latency_o, latency_h, sigma = T_map(x)
+    segment_type_strategy = x
+
+    flow_o = A_o @ segment_type_strategy
+    flow_h = A_h @ segment_type_strategy
+
+    equi_profile_pop = W_pop * sigma
+    agents_o = A_agents_o @ segment_type_strategy
+    agents_h = A_agents_h @ segment_type_strategy
+
+    total_travel_time = float((agents_o * latency_o + agents_h * latency_h).sum())
+    total_emission = float((flow_o * latency_o + flow_h * latency_h).sum())
+    total_revenue = float((equi_profile_pop * tau_vec.reshape(1, -1)).sum())
+
+    latency_tmp = np.zeros(S * 2)
+    latency_tmp[::2] = latency_o
+    latency_tmp[1::2] = latency_h
+    latency_lst = np.tile(latency_tmp, segment_type_num * C).reshape((1, segment_type_strategy_len))
+
+    # utility cost uses beta*latency + tau + gamma (your convention)
+    total_utility_cost = float(
+        (equi_profile_pop * (beta_lst.reshape((n_grids, 1)) * latency_lst
+                             + tau_vec.reshape(1, -1)
+                             + gamma_long)).sum()
+    )
+
+    flow_o_equi = flow_o
+    flow_h_equi = A_h2 @ segment_type_strategy
+
+    return (
+        segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr,
+        total_travel_time, total_emission, total_revenue, total_utility_cost,
+        flow_o_equi, flow_h_equi
+    )
+
+
 def get_flow_from_toll_pyomo_path(
     density, tau_cs, meta_data=None, rho=0.25, hour_idx=12,
     path_solver_name="pathampl", tee=True,
@@ -1320,8 +1620,8 @@ def get_flow_from_toll_pyomo_path(
     # cost_h = beta * lat_h + gamma[t,c] + tau[c,s]
     # 0 <= h ⟂ (cost_o - cost_h) >= 0    (choose HOT if cheaper)
     # 0 <= (1-h) ⟂ (cost_h - cost_o) >= 0
-    m.comp_h = Complementarity(m.T, m.CC, m.SEG)
-    m.comp_o = Complementarity(m.T, m.CC, m.SEG)
+#    m.comp_h = Complementarity(m.T, m.CC, m.SEG)
+#    m.comp_o = Complementarity(m.T, m.CC, m.SEG)
 
     def tau_cs_const(c, s):
         return float(tau_cs[c, s])
@@ -1355,7 +1655,7 @@ def get_flow_from_toll_pyomo_path(
     # Occupancy-choice complementarity:
     # y[t,p,c] > 0 => TotCost(t,p,c) = pi[t,p] (minimum)
     # y[t,p,c] = 0 => TotCost(t,p,c) >= pi[t,p]
-    m.comp_occ = Complementarity(m.T, m.P, m.CC)
+#    m.comp_occ = Complementarity(m.T, m.P, m.CC)
 
     def comp_occ_rule(mm, t, p, c):
         return complements(mm.y[t, p, c] >= 0, (tot_cost(mm, t, p, c) - mm.pi[t, p]) >= 0)
@@ -1366,6 +1666,7 @@ def get_flow_from_toll_pyomo_path(
     # Solve with PATH
     # ----------------------------
     solver = SolverFactory(path_solver_name)  # try "pathampl" if "path" not found
+    solver.options["output"] = "yes"          # CRITICAL
     solver.options["convergence_tolerance"] = 1e-4
     solver.options["major_iteration_limit"] = 100
     solver.options["minor_iteration_limit"] = 1000
@@ -1477,7 +1778,7 @@ def toll_design_grid_search_single(tau_tup_lst, density, hour_idx = 12, tau_max 
         tau_cs[1,:] = tau_cs[0,:] / 4
         for rho in rho_lst:
             ### segment_type_num * C * S * 2
-            segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, _, _ = get_flow_from_toll_iterative_mann(density, tau_cs = tau_cs, rho = rho, hour_idx = hour_idx, num_itr = num_itr, lam = lam)
+            segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, _, _ = get_flow_from_toll_solodov_svaiter(density, tau_cs = tau_cs, rho = rho, hour_idx = hour_idx, max_iter=20, gamma=0.5, sigma_ls=0.3, dykstra_max_iter=200, dykstra_tol=1e-10, stop_tol=1e-6, verbose=True)
             ### Store results
             dct_results["Rho"].append(rho)
             dct_results["Loss"].append(loss_arr[-1])
@@ -1629,27 +1930,28 @@ else:
 
 hour_idx = 0
 #segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 50, lam = 1)
-segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_pyomo_path(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = hour_idx, warmstart_from_mann=True, mann_num_itr=20, mann_lam=1)
-print(segment_type_strategy.round(3))
-print(segment_type_strategy.sum())
-print(total_travel_time, total_emission, total_revenue, total_utility_cost)
-print("Final Loss:", loss_arr[-1])
-print(flow_o_equi)
-print(flow_h_equi)
-describe_segment_type_strategy(segment_type_strategy, density, hour_idx = hour_idx, eps = 1e-2)
-
-plt.plot(loss_arr)
-#plt.yscale("log")
-plt.title(f"loss = {np.min(loss_arr):.2e}")
-plt.savefig("loss.png")
-plt.clf()
-plt.close()
-
-assert False
+#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_solodov_svaiter(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho=0.25, hour_idx=hour_idx, max_iter=20, gamma=0.5, sigma_ls=0.3, dykstra_max_iter=200, dykstra_tol=1e-10, stop_tol=1e-6, verbose=True)
+#print(segment_type_strategy.round(3))
+#print(segment_type_strategy.sum())
+#print(total_travel_time, total_emission, total_revenue, total_utility_cost)
+##140325.4597480856 107360.6158373163 0.0 35344.609178024155
+#print("Final Loss:", loss_arr[-1])
+#print(flow_o_equi)
+#print(flow_h_equi)
+#describe_segment_type_strategy(segment_type_strategy, density, hour_idx = hour_idx, eps = 1e-2)
+#
+#plt.plot(loss_arr)
+##plt.yscale("log")
+#plt.title(f"loss = {np.min(loss_arr):.2e}")
+#plt.savefig("loss.png")
+#plt.clf()
+#plt.close()
+#
+#assert False
 
 df_all = None
 for hour_idx in tqdm(range(4)):
-    df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 0.5, rho_lst = [0.25], num_itr = 50, lam = 1)
+    df = toll_design_grid_search(density, hour_idx = hour_idx, tau_max = 5, d_tau = 0.5, rho_lst = [0.25])
     df["Hour"] = hour_idx + 14
     if df_all is None:
         df_all = df
