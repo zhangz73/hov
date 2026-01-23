@@ -1067,8 +1067,11 @@ def get_flow_from_toll_iterative_mann(density, tau_cs, meta_data = None, rho = 0
 
 def get_flow_from_toll_pyomo_path(
     density, tau_cs, meta_data=None, rho=0.25, hour_idx=12,
-    path_solver_name="pathampl", tee=True
+    path_solver_name="pathampl", tee=True,
+    warmstart_from_mann=True,
+    mann_num_itr=10, mann_lam=0.5
 ):
+
     ### The PATH Solver: A Non-Monotone Stabilization Scheme for Mixed Complementarity Problems, Dirkse & Ferris
 
     # ----------------------------
@@ -1154,6 +1157,13 @@ def get_flow_from_toll_pyomo_path(
     # gamma: shape (n_grids, C)
     # Your original gamma_lst_c seems shaped (n_grids, C) (or compatible)
     gamma_tc = gamma_lst_c  # expect shape (n_grids, C)
+    
+    # Tie-break to match Mann:
+    # - Lane: Mann uses (cost_h < cost_o) so ties go to ordinary => make HOT slightly more expensive
+    # - Occupancy: Mann uses np.argmin so ties go to smallest c => add small increasing penalty in c
+    eps_lane = 1e-9
+    eps_occ  = 1e-9
+
 
     # ----------------------------
     # Helper: decode indices
@@ -1184,6 +1194,68 @@ def get_flow_from_toll_pyomo_path(
     # Occupancy-choice: y[t,p,c] in [0,1], sum_c y = 1 for each (t,p)
     m.y = Var(m.T, m.P, m.CC, bounds=(0.0, 1.0))
     m.pi = Var(m.T, m.P)  # minimum total cost for (t,p), free var
+    
+    # ----------------------------
+    # Warm start from Mann iteration (aggregate)
+    # ----------------------------
+    if warmstart_from_mann:
+        seg_strat_mann, *_ = get_flow_from_toll_iterative_mann(
+            density, tau_cs, meta_data=meta_data, rho=rho, hour_idx=hour_idx,
+            num_itr=mann_num_itr, lam=mann_lam
+        )
+
+        # Decode aggregate into (p,c,s) lane ratios and occupancy shares
+        eps = 1e-12
+        h_init_pcs = np.zeros((segment_type_num, C, S))
+        y_init_pc  = np.zeros((segment_type_num, C))
+
+        for p in range(segment_type_num):
+            for c in range(C):
+                occ_mass = 0.0
+                for s in range(S):
+                    ko = k_of(p, c, s, 0)
+                    kh = k_of(p, c, s, 1)
+                    xo = float(seg_strat_mann[ko])
+                    xh = float(seg_strat_mann[kh])
+                    denom = xo + xh
+                    if denom > eps:
+                        h_init_pcs[p, c, s] = xh / denom
+                        occ_mass += denom
+                    else:
+                        # no mass here; default to 0.5 for that (p,c,s)
+                        h_init_pcs[p, c, s] = 0.5
+                y_init_pc[p, c] = occ_mass
+
+            # normalize occupancy weights for this p
+            total = y_init_pc[p, :].sum()
+            if total > eps:
+                y_init_pc[p, :] /= total
+            else:
+                y_init_pc[p, :] = 1.0 / C
+
+        # Collapse h_init across p to get a type-independent initial lane share
+        h_init_cs = h_init_pcs.mean(axis=0)  # shape (C,S)
+
+        # Assign initial values to Pyomo variables
+        for t in range(n_grids):
+            for c in range(C):
+                for s in range(S):
+                    m.h[t, c, s].value = float(h_init_cs[c, s])
+            for p in range(segment_type_num):
+                for c in range(C):
+                    m.y[t, p, c].value = float(y_init_pc[p, c])
+                m.pi[t, p].value = 0.0
+    else:
+        # fallback generic init
+        for t in range(n_grids):
+            for c in range(C):
+                for s in range(S):
+                    m.h[t, c, s].value = 0.5
+            for p in range(segment_type_num):
+                for c in range(C):
+                    m.y[t, p, c].value = 1.0 / C
+                m.pi[t, p].value = 0.0
+
 
     def y_sum_rule(mm, t, p):
         return sum(mm.y[t, p, c] for c in range(C)) == 1.0
@@ -1256,12 +1328,12 @@ def get_flow_from_toll_pyomo_path(
 
     def comp_hot_rule(mm, t, c, s):
         Co = float(beta_lst[t]) * mm.lat_o[s]
-        Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s)
+        Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s) + eps_lane
         return complements(mm.h[t, c, s] >= 0, (Co - Ch) >= 0)
 
     def comp_ord_rule(mm, t, c, s):
         Co = float(beta_lst[t]) * mm.lat_o[s]
-        Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s)
+        Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s) + eps_lane
         return complements((1.0 - mm.h[t, c, s]) >= 0, (Ch - Co) >= 0)
 
     m.comp_h = Complementarity(m.T, m.CC, m.SEG, rule=comp_hot_rule)
@@ -1274,8 +1346,10 @@ def get_flow_from_toll_pyomo_path(
         expr = 0
         for s in range(s_o, s_d + 1):
             Co = float(beta_lst[t]) * mm.lat_o[s]
-            Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s)
+            Ch = float(beta_lst[t]) * mm.lat_h[s] + float(gamma_tc[t, c]) + tau_cs_const(c, s) + eps_lane
             expr += mm.h[t, c, s] * Ch + (1.0 - mm.h[t, c, s]) * Co
+        # occupancy tie-break: prefer smallest c (matches np.argmin)
+        expr += eps_occ * c
         return expr
 
     # Occupancy-choice complementarity:
@@ -1555,7 +1629,7 @@ else:
 
 hour_idx = 0
 #segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 50, lam = 1)
-segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_pyomo_path(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx)
+segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_pyomo_path(density, tau_cs = np.array([[5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = hour_idx, warmstart_from_mann=True, mann_num_itr=20, mann_lam=1)
 print(segment_type_strategy.round(3))
 print(segment_type_strategy.sum())
 print(total_travel_time, total_emission, total_revenue, total_utility_cost)
