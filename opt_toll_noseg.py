@@ -9,8 +9,8 @@ import scipy
 from scipy import optimize
 from scipy.stats import multivariate_normal
 from scipy.sparse import csr_matrix, csr_array, dia_matrix, vstack
-from pyomo.environ import ConcreteModel, Var, RangeSet, Constraint, Expression, SolverFactory, value
-from pyomo.mpec import Complementarity, complements
+#from pyomo.environ import ConcreteModel, Var, RangeSet, Constraint, Expression, SolverFactory, value
+#from pyomo.mpec import Complementarity, complements
 import gurobipy as gp
 from gurobipy import GRB
 import matplotlib.pyplot as plt
@@ -33,7 +33,7 @@ BPR_B = 0.7906
 DISTANCE = 7.16 # miles
 WINDOW_SIZE = 1 #15
 
-DELTA = 0.125
+DELTA = 0.25#0.125
 num_grids = int(4 / DELTA)
 
 #BETA_RANGE_LST = [(x * DELTA, (x+1) * DELTA) for x in range(num_grids)]
