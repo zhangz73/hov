@@ -29,11 +29,11 @@ from tqdm import tqdm
 ###############################################################################
 # Script Options
 ###############################################################################
-N_CPU = 1
-DENSITY_RECALIBRATE = True
-DENSITY_RETRAIN = True
+N_CPU = 30
+DENSITY_RECALIBRATE = False
+DENSITY_RETRAIN = False
 TRAIN_FRAC = 0.8
-USE_5_MIN = True
+USE_5_MIN = False
 
 ###############################################################################
 # Hyperparameters
@@ -51,15 +51,15 @@ num_grids = int(4 / DELTA)
 BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT_FULL = {
     1: [(0, 0)],
-    2: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
+    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
 }
 
 BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
 GAMMA_RANGE_DCT_AM = {
     1: [(0, 0)],
-    2: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)],
-    3: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1)]
+    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)],
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1)]
 }
 
 BETA_RANGE_LST = BETA_RANGE_LST_FULL
@@ -72,10 +72,16 @@ INT_GRID = 1
 ###############################################################################
 # Load Data
 ###############################################################################
-df = pd.read_csv("data/df_meta_5min.csv")
+if not USE_5_MIN:
+    GROUPBY_COLS = ["Date", "Hour"]
+    df = pd.read_csv("data/df_meta.csv")
+else:
+    GROUPBY_COLS = ["Date", "Hour", "Minute"]
+    df = pd.read_csv("data/df_meta_5min.csv")
+
 df_pop = pd.read_csv("pop_fraction.csv", thousands=",")
 df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
-df = df.sort_values(["Date", "Hour", "Minute"], ascending=True)
+df = df.sort_values(GROUPBY_COLS, ascending=True)
 
 data_cols = ['HOV Travel Time', 'Ordinary Travel Time', 'Avg_total_toll']
 for col in data_cols:
@@ -88,7 +94,7 @@ df = df[(df["Hour"] >= 7) & (df["Hour"] <= 18)]
 df = df.dropna()
 
 df_wide = df.pivot(
-    index=["Date", "Hour", "Minute"],
+    index=GROUPBY_COLS,
     columns=["Segment"],
     values=["HOV Flow", "Ordinary Flow", "HOV Travel Time", "Ordinary Travel Time", "Avg_total_toll"]
 )
@@ -104,7 +110,7 @@ for segment_idx in range(len(segment_lst)):
 df_wide = df_wide.dropna().reset_index()
 
 df = df[df["Ordinary Travel Time"] > df["HOV Travel Time"]]
-df = df.sort_values(["Date", "Hour", "Minute"], ascending=True)
+df = df.sort_values(GROUPBY_COLS, ascending=True)
 
 df_pop["Sigma_1ratio"] = df_pop["Single"] / (
     df_pop["Single"] + df_pop["TwoPeople"] * 2 + df_pop["ThreePlus"] * 3
@@ -116,7 +122,7 @@ df_pop["Sigma_3ratio"] = df_pop["ThreePlus"] * 3 / (
     df_pop["Single"] + df_pop["TwoPeople"] * 2 + df_pop["ThreePlus"] * 3
 )
 df = df.merge(df_pop[["Date", "Sigma_1ratio", "Sigma_2ratio", "Sigma_3ratio"]], on="Date")
-df = df.sort_values(["Date", "Hour", "Minute"], ascending=True)
+df = df.sort_values(GROUPBY_COLS, ascending=True)
 df = df.dropna()
 
 TAU_LST = np.array(df["Avg_total_toll"])
@@ -168,7 +174,9 @@ for hour_idx in range(N_HOUR):
                 (df_od_demand["Hour"] == hour)
                 & (df_od_demand["Origin"] == origin_seg)
                 & (df_od_demand["Destination"] == dest_seg)
-            ].iloc[0]["Demand"] / 12
+            ].iloc[0]["Demand"]
+            if USE_5_MIN:
+                HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] /= 12
             segment_idx += 1
 
 RATIO_INDEX_TO_IGNORE = [22, 39, 40, 86]
@@ -1105,12 +1113,14 @@ def calibrate_density():
                                 * HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx]
                             )
                             d_to_fh_mat[c * N_DATA + relev_data_idx, hour_idx * single_t_d_len + d_idx] += (
-                                sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx + 1], segment_idx, c, s].sum(axis=1)
+                                1 / (c + 1)
+                                * sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx + 1], segment_idx, c, s].sum(axis=1)
                                 / elem_num
                                 * HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx]
                             )
                             d_to_fh_total_mat[relev_data_idx, hour_idx * single_t_d_len + d_idx] += (
-                                sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx + 1], segment_idx, c, s].sum(axis=1)
+                                1 / (c + 1)
+                                * sigma_ns_h[relev_data_idx, d_idx_start_lst[d_idx]:d_idx_start_lst[d_idx + 1], segment_idx, c, s].sum(axis=1)
                                 / elem_num
                                 * HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx]
                             )
@@ -1799,9 +1809,9 @@ else:
     density = np.load("density/preference_density_general_updated.npy")
 
 # describe_density(density)
-assert False
+#assert False
 
-#hour_idx = 0
+#hour_idx = 6
 #segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 50, lam = 1)
 #print(segment_type_strategy.round(3))
 #print(segment_type_strategy.sum())
@@ -1821,7 +1831,7 @@ assert False
 #assert False
 
 df_all = None
-for hour_idx in tqdm(range(4)):
+for hour_idx in tqdm(range(12)):
     df_res = toll_design_grid_search(
         density,
         hour_idx=hour_idx,
@@ -1831,7 +1841,7 @@ for hour_idx in tqdm(range(4)):
         num_itr=50,
         lam=1
     )
-    df_res["Hour"] = hour_idx + 14
+    df_res["Hour"] = hour_idx + 7
     if df_all is None:
         df_all = df_res
     else:
