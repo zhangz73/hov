@@ -5,7 +5,7 @@ import matplotlib.dates as mdates
 import matplotlib.ticker as mtick
 
 SEGMENT_LST = ['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', '3450 - Whipple NB', '3460 - Hesperian/238 NB']
-df_design = pd.read_csv("../toll_design_multiseg.csv")
+df_design = pd.read_csv("./toll_design_multiseg.csv")
 df_design = df_design[df_design["Rho"] == 0.25]
 ## Date, Hour, Segment, Avg_total_toll
 df_toll = pd.read_csv("data/df_toll.csv")
@@ -54,7 +54,7 @@ def plot_improvement(hour_lst, improvement_pct_lst, improvement_value_lst, goal,
     plt.clf()
     plt.close()
 
-N_HOURS = 4
+N_HOURS = 12
 value_dct = {"congestion_current": np.zeros(N_HOURS), "congestion_best": np.zeros(N_HOURS), "emission_current": np.zeros(N_HOURS), "emission_best": np.zeros(N_HOURS), "revenue_current": np.zeros(N_HOURS), "revenue_best": np.zeros(N_HOURS), "utility_cost_current": np.zeros(N_HOURS), "utility_cost_best": np.zeros(N_HOURS)}
 for segment_idx in range(len(SEGMENT_LST)):
     segment = SEGMENT_LST[segment_idx]
@@ -75,7 +75,7 @@ for segment_idx in range(len(SEGMENT_LST)):
     utility_cost_improvement_pct_lst = []
     utility_cost_improvement_value_lst = []
     for hour_idx in range(N_HOURS):
-        hour = 14 + hour_idx
+        hour = 7 + hour_idx
         hour_lst.append(hour)
         df_design_curr = df_design[df_design["Hour"] == hour]
         min_congestion_toll = df_design_curr[df_design_curr["Total Travel Time"] == df_design_curr["Total Travel Time"].min()].iloc[0][f"Toll {segment_idx}"]
