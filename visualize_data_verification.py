@@ -5,10 +5,11 @@ import matplotlib.dates as mdates
 import matplotlib.ticker as mtick
 
 TEST_BEGIN_DATE = "2021-05-07"
-SCHEME = "gamma3=2"
+#SCHEME = "gamma3=2"
 
 ## Strategy profile
-df_strategy = pd.read_csv(f"CalibrationResults/Flow/tmp_ratio_{SCHEME}.csv")
+#df_strategy = pd.read_csv(f"CalibrationResults/Flow/tmp_ratio_{SCHEME}.csv")
+df_strategy = pd.read_csv(f"tmp_ratio.csv")
 df_strategy["Total"] = df_strategy["Equi 0"] + df_strategy["Equi 1"] + df_strategy["Equi 2"]
 for col in ["Equi 0", "Equi 1", "Equi 2", "Target 0", "Target 1", "Target 2"]:
     df_strategy[col] /= df_strategy["Total"]
@@ -27,8 +28,8 @@ plt.legend(loc="center left", bbox_to_anchor=(1, 0.5))
 plt.gca().xaxis.set_major_formatter(mdates.DateFormatter("%m-%d"))
 plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
 plt.tight_layout()
-plt.savefig(f"CalibrationResults/Plots/daily_ratio_{SCHEME}.png")
-#plt.savefig("DataVerification/daily_ratio.png")
+#plt.savefig(f"CalibrationResults/Plots/daily_ratio_{SCHEME}.png")
+plt.savefig("DataVerification/daily_ratio.png")
 plt.clf()
 plt.close()
 
@@ -62,6 +63,7 @@ for hour in df_flow["Hour"].unique():
             plt.savefig(f"DataVerification/DetailedFlow/{hour}_{segment_fname}_{lane}_flow.png")
             plt.clf()
             plt.close()
+"""
 
 ## Calibrated flows v.s. actual flows
 df_flow = pd.read_csv("tmp.csv")
@@ -81,4 +83,3 @@ plt.tight_layout()
 plt.savefig(f"DataVerification/flow_comp.png")
 plt.clf()
 plt.close()
-"""
