@@ -10,12 +10,38 @@ df_design = df_design[df_design["Rho"] == 0.25]
 df_design = df_design[(df_design["Toll 0"] > 0) & (df_design["Toll 1"] > 0) & (df_design["Toll 2"] > 0) & (df_design["Toll 3"] > 0) & (df_design["Toll 4"] > 0)]
 ## Date, Hour, Segment, Avg_total_toll
 df_toll = pd.read_csv("data/df_toll.csv")
+N_HOURS = 12
 
 INT_GRID = 10
 N_POP = 1#INT_GRID ** 3 # 24546
 df_design["Total Travel Time"] /= N_POP
 df_design["Total Emission"] /= N_POP
 df_design["Total Utility Cost"] /= N_POP
+
+toll_cols = [f"Toll {i}" for i in range(3)]
+mask = (df_design["Hour"] <= 13) & (df_design[toll_cols].ge(1.5).any(axis=1))
+df_design = df_design.loc[~mask].reset_index(drop=True)
+toll_cols = [f"Toll {i}" for i in range(5)]
+mask = (df_design["Hour"] <= 13) & (df_design[toll_cols].ge(2.5).any(axis=1))
+df_design = df_design.loc[~mask].reset_index(drop=True)
+
+TOLL_LAM = 0.001
+df_design_lst = []
+for hour_idx in range(N_HOURS):
+    hour = 7 + hour_idx
+    toll_deviate = 0
+    df_design_curr = df_design[df_design["Hour"] == hour].copy()
+    for i in range(len(SEGMENT_LST)):
+        segment = SEGMENT_LST[i]
+        df_toll_curr = df_toll[(df_toll["Hour"] == hour) & (df_toll["Segment"] == segment)]
+        toll_avg = df_toll_curr["Avg_total_toll"].mean()
+        toll_deviate += (toll_avg - df_design_curr[f"Toll {i}"]).abs()
+    df_design_curr["Total Travel Time"] += toll_deviate * df_design_curr["Total Travel Time"].mean() * TOLL_LAM
+    df_design_curr["Total Emission"] += toll_deviate * df_design_curr["Total Emission"].mean() * TOLL_LAM
+    df_design_curr["Total Utility Cost"] += toll_deviate * df_design_curr["Total Utility Cost"].mean() * TOLL_LAM
+    df_design_curr["Total Revenue"] -= toll_deviate * df_design_curr["Total Revenue"].mean() * TOLL_LAM
+    df_design_lst.append(df_design_curr)
+df_design = pd.concat(df_design_lst, ignore_index = True)
 
 def plot_hourly_price(hour_lst, toll_design_lst, toll_avg_lst, toll_upper_lst, toll_lower_lst, goal, segment):
     if goal is not None:
@@ -55,7 +81,6 @@ def plot_improvement(hour_lst, improvement_pct_lst, improvement_value_lst, goal,
     plt.clf()
     plt.close()
 
-N_HOURS = 12
 value_dct = {"congestion_current": np.zeros(N_HOURS), "congestion_best": np.zeros(N_HOURS), "emission_current": np.zeros(N_HOURS), "emission_best": np.zeros(N_HOURS), "revenue_current": np.zeros(N_HOURS), "revenue_best": np.zeros(N_HOURS), "utility_cost_current": np.zeros(N_HOURS), "utility_cost_best": np.zeros(N_HOURS)}
 for segment_idx in range(len(SEGMENT_LST)):
     segment = SEGMENT_LST[segment_idx]
@@ -78,15 +103,15 @@ for segment_idx in range(len(SEGMENT_LST)):
     for hour_idx in range(N_HOURS):
         hour = 7 + hour_idx
         hour_lst.append(hour)
+        df_toll_curr = df_toll[(df_toll["Hour"] == hour) & (df_toll["Segment"] == segment)]
+        toll_avg = df_toll_curr["Avg_total_toll"].mean()
+        toll_upper = df_toll_curr["Avg_total_toll"].quantile(0.025)
+        toll_lower = df_toll_curr["Avg_total_toll"].quantile(0.975)
         df_design_curr = df_design[df_design["Hour"] == hour]
         min_congestion_toll = df_design_curr[df_design_curr["Total Travel Time"] == df_design_curr["Total Travel Time"].min()].iloc[0][f"Toll {segment_idx}"]
         min_emission_toll = df_design_curr[df_design_curr["Total Emission"] == df_design_curr["Total Emission"].min()].iloc[0][f"Toll {segment_idx}"]
         max_revenue_toll = df_design_curr[df_design_curr["Total Revenue"] == df_design_curr["Total Revenue"].max()].iloc[0][f"Toll {segment_idx}"]
         min_utility_cost_toll = df_design_curr[df_design_curr["Total Utility Cost"] == df_design_curr["Total Utility Cost"].min()].iloc[0][f"Toll {segment_idx}"]
-        df_toll_curr = df_toll[(df_toll["Hour"] == hour) & (df_toll["Segment"] == segment)]
-        toll_avg = df_toll_curr["Avg_total_toll"].mean()
-        toll_upper = df_toll_curr["Avg_total_toll"].quantile(0.025)
-        toll_lower = df_toll_curr["Avg_total_toll"].quantile(0.975)
         min_congestion_toll_lst.append(min_congestion_toll)
         min_emission_toll_lst.append(min_congestion_toll)
         max_revenue_toll_lst.append(max_revenue_toll)
