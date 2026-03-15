@@ -1635,7 +1635,7 @@ def get_flow_from_toll_iterative_mann(
         else:
             equi_profile_dens = equi_profile_to_strategy_density_vec * sigma_s
 
-        if loss < 1e-5:
+        if loss < 1e-8:
             break
 
     # ------------------------------------------------------------------
@@ -1748,7 +1748,7 @@ def toll_design_grid_search_single(
             )
 
             dct_results["Rho"].append(rho)
-            dct_results["Loss"].append(loss_arr[-1])
+            dct_results["Loss"].append(np.min(loss_arr))
             dct_results["Total Travel Time"].append(total_travel_time)
             dct_results["Total Emission"].append(total_emission)
             dct_results["Total Revenue"].append(total_revenue)
@@ -1838,7 +1838,7 @@ for hour_idx in tqdm(range(12)):
         tau_max=5,
         d_tau=0.5,
         rho_lst=[0.25],
-        num_itr=50,
+        num_itr=200,
         lam=1
     )
     df_res["Hour"] = hour_idx + 7
