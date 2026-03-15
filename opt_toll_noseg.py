@@ -1927,7 +1927,7 @@ else:
         )
         for i in range(N_CPU)
     )
-
+    dct_results = None
     for res in results:
         if dct_results is None:
             dct_results = res
