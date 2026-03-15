@@ -34,6 +34,7 @@ DENSITY_RECALIBRATE = False
 DENSITY_RETRAIN = False
 TRAIN_FRAC = 0.8
 USE_5_MIN = False
+FINE_TUNE = True
 
 ###############################################################################
 # Hyperparameters
@@ -1703,8 +1704,6 @@ def toll_design_grid_search_single(
     tau_tup_lst,
     density,
     hour_idx=12,
-    tau_max=5,
-    d_tau=1,
     rho_lst=[0.25, 0.5, 0.75],
     num_itr=100,
     lam=1e-2
@@ -1779,8 +1778,6 @@ def toll_design_grid_search(
             tau_tup_lst[(i * batch_size):min((i + 1) * batch_size, len(tau_tup_lst))],
             density,
             hour_idx,
-            tau_max,
-            d_tau,
             rho_lst,
             num_itr,
             lam
@@ -1797,6 +1794,68 @@ def toll_design_grid_search(
 
     return pd.DataFrame.from_dict(dct_results)
 
+def toll_design_fine_tune_single(
+    hour_idx_lst,
+    tau_tup_lst,
+    density,
+    rho_lst=[0.25, 0.5, 0.75],
+    num_itr=100,
+    lam=1e-2
+):
+    assert len(hour_idx_lst) == len(tau_tup_lst)
+    dct_results = {
+        "Rho": [],
+        "Loss": [],
+        "Total Travel Time": [],
+        "Total Emission": [],
+        "Total Revenue": [],
+        "Total Utility Cost": []
+    }
+    for s in range(S):
+        dct_results[f"Toll {s}"] = []
+    dct_results["Hour"] = []
+    n_items = len(hour_idx_lst)
+
+    for n in tqdm(range(n_items)):
+        hour_idx, tau_tup = hour_idx_lst[n], tau_tup_lst[n]
+        tau_cs = np.zeros((C, S))
+        tau_cs[0, :] = np.array(tau_tup)
+        tau_cs[1, :] = tau_cs[0, :] / 4
+
+        for rho in rho_lst:
+            (
+                segment_type_strategy,
+                loss_arr,
+                latency_o,
+                latency_h,
+                utility_cost_arr,
+                total_travel_time,
+                total_emission,
+                total_revenue,
+                total_utility_cost,
+                _,
+                _
+            ) = get_flow_from_toll_iterative_mann(
+                density,
+                tau_cs=tau_cs,
+                rho=rho,
+                hour_idx=hour_idx,
+                num_itr=num_itr,
+                lam=lam
+            )
+
+            dct_results["Rho"].append(rho)
+            dct_results["Loss"].append(np.min(loss_arr))
+            dct_results["Total Travel Time"].append(total_travel_time)
+            dct_results["Total Emission"].append(total_emission)
+            dct_results["Total Revenue"].append(total_revenue)
+            dct_results["Total Utility Cost"].append(total_utility_cost)
+
+            for s in range(S):
+                dct_results[f"Toll {s}"].append(tau_tup[s])
+            dct_results["Hour"].append(hour_idx + 7)
+
+    return dct_results
 
 ###############################################################################
 # Main
@@ -1811,8 +1870,9 @@ else:
 # describe_density(density)
 #assert False
 
-#hour_idx = 6
-#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0, 0, 0], [0, 0, 0], [1, 0.25, 0], [2.5, 0.75, 0], [4, 1, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 50, lam = 1)
+#hour_idx = 7
+#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0.5, 0.125, 0], [1, 0.25, 0], [0.5, 0.125, 0], [0.5, 0.125, 0], [1.5, 0.375, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 500, lam = 1e-2)
+##segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0.5, 0.125, 0], [1.5, 0.375, 0], [1, 0.25, 0], [1.5, 0.375, 0], [0.5, 0.125, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 500, lam = 1e-2)
 #print(segment_type_strategy.round(3))
 #print(segment_type_strategy.sum())
 #print(total_travel_time, total_emission, total_revenue, total_utility_cost)
@@ -1830,21 +1890,51 @@ else:
 #
 #assert False
 
-df_all = None
-for hour_idx in tqdm(range(12)):
-    df_res = toll_design_grid_search(
-        density,
-        hour_idx=hour_idx,
-        tau_max=5,
-        d_tau=0.5,
-        rho_lst=[0.25],
-        num_itr=200,
-        lam=1
-    )
-    df_res["Hour"] = hour_idx + 7
-    if df_all is None:
-        df_all = df_res
-    else:
-        df_all = pd.concat([df_all, df_res], ignore_index=True)
+if not FINE_TUNE:
+    df_all = None
+    for hour_idx in tqdm(range(12)):
+        df_res = toll_design_grid_search(
+            density,
+            hour_idx=hour_idx,
+            tau_max=5,
+            d_tau=0.5,
+            rho_lst=[0.25],
+            num_itr=200,
+            lam=1
+        )
+        df_res["Hour"] = hour_idx + 7
+        if df_all is None:
+            df_all = df_res
+        else:
+            df_all = pd.concat([df_all, df_res], ignore_index=True)
+else:
+    df_all = pd.read_csv("toll_design_multiseg.csv")
+    df_sub = df_all[df_all["Loss"] > 1e-6]
+    hour_idx_lst = (df_sub["Hour"] - 7).values.tolist()
+    tau_tup_lst = df_sub[[x for x in df_sub.columns if x.startswith("Toll")]].values.tolist()
+    tau_tup_lst = [tuple(x) for x in tau_tup_lst]
+    rho_lst = [0.25]
+    batch_size = int(math.ceil(len(tau_tup_lst) / N_CPU))
 
+    results = Parallel(n_jobs=N_CPU)(
+        delayed(toll_design_fine_tune_single)(
+            hour_idx_lst[(i * batch_size):min((i + 1) * batch_size, len(hour_idx_lst))],
+            tau_tup_lst[(i * batch_size):min((i + 1) * batch_size, len(tau_tup_lst))],
+            density,
+            rho_lst,
+            200,
+            1e-2
+        )
+        for i in range(N_CPU)
+    )
+
+    for res in results:
+        if dct_results is None:
+            dct_results = res
+        else:
+            for key in dct_results:
+                dct_results[key] += res[key]
+
+    df_sub = pd.DataFrame.from_dict(dct_results)
+    df_all = pd.concat([df_all, df_sub]).drop_duplicates(subset = ["Rho", "Hour"] + [f"Toll {s}" for s in range(S)], keep="last")
 df_all.to_csv("toll_design_multiseg.csv", index=False)
