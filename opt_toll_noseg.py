@@ -1890,15 +1890,18 @@ else:
 #
 #assert False
 
+fname = "toll_design_multiseg_hour=17.csv"
+rho_lst = [0.25, 0.50, 0.75]
+
 if not FINE_TUNE:
     df_all = None
-    for hour_idx in tqdm(range(12)):
+    for hour_idx in tqdm([10]):#tqdm(range(12)):
         df_res = toll_design_grid_search(
             density,
             hour_idx=hour_idx,
             tau_max=5,
             d_tau=0.5,
-            rho_lst=[0.25],
+            rho_lst=rho_lst,#[0.25],
             num_itr=200,
             lam=1
         )
@@ -1908,12 +1911,11 @@ if not FINE_TUNE:
         else:
             df_all = pd.concat([df_all, df_res], ignore_index=True)
 else:
-    df_all = pd.read_csv("toll_design_multiseg.csv")
+    df_all = pd.read_csv(fname)
     df_sub = df_all[df_all["Loss"] > 1e-6]
     hour_idx_lst = (df_sub["Hour"] - 7).values.tolist()
     tau_tup_lst = df_sub[[x for x in df_sub.columns if x.startswith("Toll")]].values.tolist()
     tau_tup_lst = [tuple(x) for x in tau_tup_lst]
-    rho_lst = [0.25]
     batch_size = int(math.ceil(len(tau_tup_lst) / N_CPU))
 
     results = Parallel(n_jobs=N_CPU)(
@@ -1937,4 +1939,4 @@ else:
 
     df_sub = pd.DataFrame.from_dict(dct_results)
     df_all = pd.concat([df_all, df_sub]).drop_duplicates(subset = ["Rho", "Hour"] + [f"Toll {s}" for s in range(S)], keep="last")
-df_all.to_csv("toll_design_multiseg.csv", index=False)
+df_all.to_csv(fname, index=False)
