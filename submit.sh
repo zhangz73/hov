@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --time=48:00:00     # Time limit hrs:min:sec
+#SBATCH --time=12:00:00     # Time limit hrs:min:sec
 #SBATCH --output=job_%j.out
 
 # Optional: make Python aware of CPU count
