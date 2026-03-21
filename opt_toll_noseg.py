@@ -1895,7 +1895,7 @@ rho_lst = [0.25, 0.50, 0.75]
 
 if not FINE_TUNE:
     df_all = None
-    for hour_idx in tqdm([10]):#tqdm(range(12)):
+    for hour_idx in tqdm([9]):#tqdm(range(12)):
         df_res = toll_design_grid_search(
             density,
             hour_idx=hour_idx,
