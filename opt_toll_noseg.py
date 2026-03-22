@@ -242,6 +242,39 @@ class STEArgmin(torch.autograd.Function):
 def ste_argmin(input):
     return STEArgmin.apply(input)
 
+class STEOneHotArgmin(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input):
+        """
+        input: (..., K)
+        returns: hard one-hot tensor of shape (..., K),
+                 selecting argmin along the last dimension
+        """
+        index = torch.argmin(input, dim=-1)  # (...,)
+        hard = torch.nn.functional.one_hot(index, num_classes=input.shape[-1]).to(input.dtype)
+        ctx.save_for_backward(input)
+        return hard
+
+    @staticmethod
+    def backward(ctx, grad_output, beta = 100.0):
+        """
+        Use the Jacobian of softmin in the backward pass.
+        grad_output: (..., K)
+        returns: grad_input of shape (..., K)
+        """
+        (input,) = ctx.saved_tensors
+        softmin = torch.softmax(-input * beta, dim=-1)  # (..., K)
+
+        # Jacobian-vector product for softmin:
+        # d softmin(x) = -[Diag(s) - s s^T] dx
+        # Equivalent VJP with incoming grad_output:
+        dot = (grad_output * softmin).sum(dim=-1, keepdim=True)
+        grad_input = softmin * (dot - grad_output)
+        return grad_input
+
+def ste_onehot_argmin(input):
+    return STEOneHotArgmin.apply(input)
+
 
 def get_cost(flow, distance, bpr_a=BPR_A, bpr_b=BPR_B):
     return ((bpr_a * flow) ** BPR_POWER + bpr_b) * distance
@@ -710,7 +743,7 @@ def solve_sigma_given_parameters_vec(beta_lst, gamma_box_map, c_o, c_h, tau_cs):
 
     return lane_cs_h.astype(dtype), lane_cs_o.astype(dtype), occ_frac.astype(dtype)
 
-def solve_sigma_given_parameters_vec_torch(beta_lst, gamma_box_map, c_o, c_h, tau_cs):
+def solve_sigma_given_parameters_vec_torch_hardmin(beta_lst, gamma_box_map, c_o, c_h, tau_cs):
     """
     Batched torch implementation.
 
@@ -805,6 +838,122 @@ def solve_sigma_given_parameters_vec_torch(beta_lst, gamma_box_map, c_o, c_h, ta
     # lane_cs:      (G, C, S)     -> (G, 1, C, S)
     # occ_frac:     (G, M, C)     -> (G, M, C, 1)
     # active_masks: (M, S)        -> (1, M, 1, S)
+    lane_cs_exp = lane_cs.unsqueeze(1)                 # (G,1,C,S)
+    occ_frac_exp = occ_frac.unsqueeze(-1)              # (G,M,C,1)
+    active_masks_exp = active_masks.unsqueeze(0).unsqueeze(2)  # (1,M,1,S)
+
+    lane_cs_h = occ_frac_exp * lane_cs_exp * active_masks_exp
+    lane_cs_o = occ_frac_exp * (1.0 - lane_cs_exp) * active_masks_exp
+
+    # Add leading n_data dimension = 1 for compatibility
+    lane_cs_h = lane_cs_h.unsqueeze(0)  # (1,G,M,C,S)
+    lane_cs_o = lane_cs_o.unsqueeze(0)  # (1,G,M,C,S)
+    occ_frac = occ_frac.unsqueeze(0)    # (1,G,M,C)
+
+    return lane_cs_h, lane_cs_o, occ_frac
+
+def solve_sigma_given_parameters_vec_torch(beta_lst, gamma_box_map, c_o, c_h, tau_cs):
+    """
+    Batched torch implementation.
+
+    Parameters
+    ----------
+    beta_lst : torch.Tensor, shape (G,)
+    gamma_box_map : torch.Tensor, shape (G, C-1, 2)
+    c_o : torch.Tensor, shape (S,)
+    c_h : torch.Tensor, shape (S,)
+    tau_cs : torch.Tensor, shape (C, S)
+
+    Returns
+    -------
+    lane_cs_h : torch.Tensor, shape (1, G, M, C, S)
+    lane_cs_o : torch.Tensor, shape (1, G, M, C, S)
+    occ_frac  : torch.Tensor, shape (1, G, M, C)
+    """
+    assert beta_lst.shape[0] == gamma_box_map.shape[0]
+
+    dtype = beta_lst.dtype
+    device = beta_lst.device
+
+    C_loc, S_loc = tau_cs.shape
+    G = beta_lst.shape[0]
+    M = int(S_loc * (S_loc + 1) / 2)
+
+    # ------------------------------------------------------------------
+    # 1) Lane choice for each occupancy and segment, batched over grids
+    # ------------------------------------------------------------------
+    # cost_o: (G, S)
+    cost_o = beta_lst[:, None] * c_o[None, :]
+
+    # cost_h: (G, C, S)
+    cost_h = beta_lst[:, None, None] * c_h[None, None, :] + tau_cs[None, :, :]
+
+    # Build two-way costs for each (g, c, s):
+    # choice_cost[..., 0] = HOT cost
+    # choice_cost[..., 1] = ordinary-lane cost
+    choice_cost = torch.stack(
+        [cost_h, cost_o[:, None, :].expand(-1, C_loc, -1)],
+        dim=-1,
+    )  # (G, C, S, 2)
+
+    # Hard forward argmin, softmin gradient backward
+    lane_onehot = ste_onehot_argmin(choice_cost)  # (G, C, S, 2)
+
+    # lane_cs[g,c,s] = 1 if HOT is chosen, 0 otherwise
+    lane_cs = lane_onehot[..., 0]  # (G, C, S)
+
+    # minimized lane cost for each occupancy and segment
+    total_cost_mat = (
+        lane_onehot[..., 0] * cost_h
+        + lane_onehot[..., 1] * cost_o[:, None, :]
+    )  # (G, C, S)
+
+    # ------------------------------------------------------------------
+    # 2) Build all OD pairs and active masks once
+    # ------------------------------------------------------------------
+    od_starts = []
+    od_ends = []
+    active_masks = []
+
+    for s_o in range(S_loc):
+        for s_d in range(s_o, S_loc):
+            od_starts.append(s_o)
+            od_ends.append(s_d)
+
+            mask = torch.zeros(S_loc, dtype=dtype, device=device)
+            mask[s_o:(s_d + 1)] = 1.0
+            active_masks.append(mask)
+
+    od_starts = torch.tensor(od_starts, dtype=torch.long, device=device)  # (M,)
+    od_ends = torch.tensor(od_ends, dtype=torch.long, device=device)      # (M,)
+    active_masks = torch.stack(active_masks, dim=0)                       # (M,S)
+
+    # ------------------------------------------------------------------
+    # 3) Compute \tilde C_c^{ij}(beta) for all grids and all OD pairs
+    #    using prefix sums
+    # ------------------------------------------------------------------
+    prefix = torch.cumsum(total_cost_mat, dim=2)
+    prefix_pad = torch.cat(
+        [torch.zeros((G, C_loc, 1), dtype=dtype, device=device), prefix],
+        dim=2
+    )
+
+    ends_idx = (od_ends + 1).view(1, 1, M).expand(G, C_loc, M)
+    starts_idx = od_starts.view(1, 1, M).expand(G, C_loc, M)
+
+    tilde_cost_pairs = prefix_pad.gather(2, ends_idx) - prefix_pad.gather(2, starts_idx)  # (G,C,M)
+    tilde_cost_pairs = tilde_cost_pairs.permute(0, 2, 1).contiguous()  # (G,M,C)
+
+    # ------------------------------------------------------------------
+    # 4) Occupancy fractions for all grids and all OD pairs
+    # ------------------------------------------------------------------
+    occ_frac = occupancy_fraction_from_gamma_box_torch_batch(
+        tilde_cost_pairs, gamma_box_map
+    )  # (G,M,C)
+
+    # ------------------------------------------------------------------
+    # 5) Build final expected lane-choice tensors by broadcasting
+    # ------------------------------------------------------------------
     lane_cs_exp = lane_cs.unsqueeze(1)                 # (G,1,C,S)
     occ_frac_exp = occ_frac.unsqueeze(-1)              # (G,M,C,1)
     active_masks_exp = active_masks.unsqueeze(0).unsqueeze(2)  # (1,M,1,S)
@@ -1870,25 +2019,25 @@ else:
 # describe_density(density)
 #assert False
 
-#hour_idx = 7
-#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0.5, 0.125, 0], [1, 0.25, 0], [0.5, 0.125, 0], [0.5, 0.125, 0], [1.5, 0.375, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 500, lam = 1e-2)
-##segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0.5, 0.125, 0], [1.5, 0.375, 0], [1, 0.25, 0], [1.5, 0.375, 0], [0.5, 0.125, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 500, lam = 1e-2)
-#print(segment_type_strategy.round(3))
-#print(segment_type_strategy.sum())
-#print(total_travel_time, total_emission, total_revenue, total_utility_cost)
-#print("Final Loss:", loss_arr[-1])
-#print(flow_o_equi)
-#print(flow_h_equi)
-#describe_segment_type_strategy(segment_type_strategy, density, hour_idx = hour_idx, eps = 1e-2)
-#
-#plt.plot(loss_arr)
-##plt.yscale("log")
-#plt.title(f"loss = {np.min(loss_arr):.2e}")
-#plt.savefig("loss.png")
-#plt.clf()
-#plt.close()
-#
-#assert False
+hour_idx = 7
+segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative(density, tau_cs = np.array([[1, 0.25, 0], [2, 0.5, 0], [2.5, 0.625, 0], [4.0, 1, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 5000, lam = 1e-3)
+#segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0.5, 0.125, 0], [1.5, 0.375, 0], [1, 0.25, 0], [1.5, 0.375, 0], [0.5, 0.125, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 500, lam = 1e-2)
+print(segment_type_strategy.round(3))
+print(segment_type_strategy.sum())
+print(total_travel_time, total_emission, total_revenue, total_utility_cost)
+print("Final Loss:", loss_arr[-1])
+print(flow_o_equi)
+print(flow_h_equi)
+describe_segment_type_strategy(segment_type_strategy, density, hour_idx = hour_idx, eps = 1e-2)
+
+plt.plot(loss_arr)
+#plt.yscale("log")
+plt.title(f"loss = {np.min(loss_arr):.2e}")
+plt.savefig("loss.png")
+plt.clf()
+plt.close()
+
+assert False
 
 fname = "toll_design_multiseg_hour=16.csv"
 rho_lst = [0.25, 0.50, 0.75]
