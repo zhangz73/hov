@@ -29,11 +29,11 @@ from tqdm import tqdm
 ###############################################################################
 # Script Options
 ###############################################################################
-N_CPU = 30
-DENSITY_RECALIBRATE = False
-DENSITY_RETRAIN = False
+N_CPU = 1#30
+DENSITY_RECALIBRATE = True
+DENSITY_RETRAIN = True
 TRAIN_FRAC = 0.8
-USE_5_MIN = False
+USE_5_MIN = True
 FINE_TUNE = True
 
 ###############################################################################
@@ -49,14 +49,14 @@ WINDOW_SIZE = 1
 DELTA = 0.125
 num_grids = int(4 / DELTA)
 
-BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
+BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4), (4, 8)]
 GAMMA_RANGE_DCT_FULL = {
     1: [(0, 0)],
     2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 }
 
-BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
+BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT_AM = {
     1: [(0, 0)],
     2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)],
@@ -181,7 +181,7 @@ for hour_idx in range(N_HOUR):
             segment_idx += 1
 
 RATIO_INDEX_TO_IGNORE = [22, 39, 40, 86]
-DATES_TO_IGNORE = ["2021-02-15", "2021-03-31", "2021-04-23", "2021-04-26", "2021-04-28", "2021-06-30"]
+DATES_TO_IGNORE = ["2021-02-15", "2021-03-31", "2021-04-23", "2021-04-26", "2021-04-27", "2021-04-28", "2021-06-30"]
 
 date_lst = list(set(list(df_wide.drop_duplicates("Date")["Date"])) - set(DATES_TO_IGNORE))
 date_lst.sort()
@@ -1177,8 +1177,8 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     obj_ordinary = ((ordinary_pred - ordinary_tgt) * (ordinary_pred - ordinary_tgt)).sum() / max(TRAIN_IDX, 1)
     obj_hot = ((hot_pred - hot_tgt) * (hot_pred - hot_tgt)).sum() / max(TRAIN_IDX, 1)
 
-    objective = obj_ordinary + 9.0 * obj_hot
-#    objective = objective * 144
+    objective = obj_ordinary + obj_hot * 9.0
+    objective = objective * 12 #144
 
     # HOT-lane occupancy ratio fitting
     flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
@@ -2011,13 +2011,13 @@ def toll_design_fine_tune_single(
 ###############################################################################
 if DENSITY_RECALIBRATE:
     density = calibrate_density()
-    if DENSITY_RETRAIN:
-        np.save("density/preference_density_general_updated.npy", density)
+#    if DENSITY_RETRAIN:
+#        np.save("density/preference_density_general_updated.npy", density)
 else:
     density = np.load("density/preference_density_general_updated.npy")
 
-# describe_density(density)
-#assert False
+describe_density(density)
+assert False
 
 hour_idx = 7
 segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative(density, tau_cs = np.array([[1, 0.25, 0], [2, 0.5, 0], [2.5, 0.625, 0], [4.0, 1, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 5000, lam = 1e-3)

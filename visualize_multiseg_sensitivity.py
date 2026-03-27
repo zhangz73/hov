@@ -5,6 +5,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 
+RHO = 0.25
+
 SEGMENT_LST = [
     '3420 - Auto Mall NB',
     '3430 - Mowry NB',
@@ -30,8 +32,8 @@ OBJECTIVE_DIRECTIONS = {
 
 SAVE_DIR = "DynamicDesign/MultiSeg/Sensitivity"
 
-df_design = pd.read_csv("./toll_design_multiseg.csv")
-df_design = df_design[df_design["Rho"] == 0.25].copy()
+df_design = pd.read_csv("./toll_design_multiseg_hour=16_multi-rho.csv")
+df_design = df_design[df_design["Rho"] == RHO].copy()
 
 df_design = df_design[(df_design["Toll 0"] > 0) & (df_design["Toll 1"] > 0) & (df_design["Toll 2"] > 0) & (df_design["Toll 3"] > 0) & (df_design["Toll 4"] > 0)].copy()
 
@@ -126,12 +128,12 @@ def plot_1d_sensitivity_curves(
     add_best_line: bool = True,
 ):
     """
-    For each objective and each segment, fix the other 4 tolls and vary the selected
-    segment using the grid points that appear in the dataframe.
+    For each objective and each segment, generate ONE plot per segment
+    (instead of putting all segments into a single figure).
     """
     hour_dir = os.path.join(save_dir, f"Hour_{_sanitize_hour(hour)}")
     os.makedirs(hour_dir, exist_ok=True)
-    
+
     if fix_at == "current":
         label = "Current Toll"
     else:
@@ -158,15 +160,14 @@ def plot_1d_sensitivity_curves(
         else:
             raise ValueError("fix_at must be either 'optimal' or 'current'")
 
-        fig, axes = plt.subplots(1, len(toll_cols), figsize=(5 * len(toll_cols), 4), sharey=False)
-        if len(toll_cols) == 1:
-            axes = [axes]
-
         best_val = df[objective_col].min() if direction == "min" else df[objective_col].max()
 
-        for j, (ax, toll_col, seg_name) in enumerate(zip(axes, toll_cols, segment_names)):
-            mask = np.ones(len(df), dtype=bool)
+        # 🔥 Key change: loop over segments and create ONE figure per segment
+        for j, (toll_col, seg_name) in enumerate(zip(toll_cols, segment_names)):
 
+            fig, ax = plt.subplots(figsize=(5, 4))  # one plot per segment
+
+            mask = np.ones(len(df), dtype=bool)
             for k, other_col in enumerate(toll_cols):
                 if k == j:
                     continue
@@ -181,34 +182,39 @@ def plot_1d_sensitivity_curves(
                     "No matching rows\nfor this slice",
                     ha="center", va="center", transform=ax.transAxes
                 )
-                ax.set_title(f"{seg_name}\n(current = {ref_tolls[j]:.1f})")
+                ax.set_title(f"{seg_name}\n({fix_at} = {ref_tolls[j]:.1f})")
                 ax.set_xlabel("Toll")
                 ax.set_ylabel(objective_col)
-                continue
+            else:
+                ax.plot(sub[toll_col], sub[objective_col], marker="o")
 
-            ax.plot(sub[toll_col], sub[objective_col], marker="o")
-            if add_best_line:
-                ax.axhline(best_val, linestyle="--", linewidth=1)
+#                if add_best_line:
+#                    ax.axhline(best_val, linestyle="--", linewidth=1)
 
-            ax.axvline(ref_tolls[j], linestyle=":", linewidth=1, label=label)
-            ax.legend()
+                ax.axvline(ref_tolls[j], color="red", label=label)
+                ax.legend()
 
-            ax.set_title(f"{seg_name}\n({fix_at} = {ref_tolls[j]:.1f})")
-            ax.set_xlabel("Toll")
-            ax.set_ylabel(objective_col)
-            ax.yaxis.set_major_formatter(mtick.StrMethodFormatter("{x:,.2f}"))
-            ax.grid(alpha=0.25)
+#                ax.set_title(f"{seg_name}\n({fix_at} = {ref_tolls[j]:.1f})")
+#                ax.set_xlabel("Toll")
+                ax.set_ylabel(objective_col)
+                ax.yaxis.set_major_formatter(mtick.StrMethodFormatter("{x:,.2f}"))
+                ax.grid(alpha=0.25)
 
-        fig.suptitle(
-            f"Hour {hour}: 1-D sensitivity curves for {objective_col}\n"
-            f"(other 4 tolls fixed at {ref_label})",
-            y=1.05
-        )
-        fig.tight_layout()
+#            fig.suptitle(
+#                f"Hour {hour}: {objective_col}\n(other 4 tolls fixed at {ref_label})"
+#            )
 
-        fname = f"sensitivity_hour_{_sanitize_hour(hour)}_{_sanitize_filename(objective_col)}_{fix_at}.png"
-        fig.savefig(os.path.join(hour_dir, fname), dpi=300, bbox_inches="tight")
-        plt.close(fig)
+            fig.tight_layout()
+
+            fname = (
+                f"sensitivity_hour_{_sanitize_hour(hour)}_"
+                f"{_sanitize_filename(objective_col)}_"
+                f"{_sanitize_filename(seg_name)}_"
+                f"{fix_at}_rho={RHO}.png"
+            )
+
+            fig.savefig(os.path.join(hour_dir, fname), dpi=300, bbox_inches="tight")
+            plt.close(fig)
 
 
 def plot_near_optimal_regions(
@@ -394,17 +400,17 @@ def run_all_hourly_plots(
             add_best_line=True,
         )
         
-        plot_1d_sensitivity_curves(
-            df=df_hour,
-            hour=hour,
-            objective_cols=OBJECTIVE_COLS,
-            toll_cols=TOLL_COLS,
-            segment_names=SEGMENT_LST,
-            directions=OBJECTIVE_DIRECTIONS,
-            save_dir=save_dir,
-            fix_at="optimal",
-            add_best_line=True,
-        )
+#        plot_1d_sensitivity_curves(
+#            df=df_hour,
+#            hour=hour,
+#            objective_cols=OBJECTIVE_COLS,
+#            toll_cols=TOLL_COLS,
+#            segment_names=SEGMENT_LST,
+#            directions=OBJECTIVE_DIRECTIONS,
+#            save_dir=save_dir,
+#            fix_at="optimal",
+#            add_best_line=True,
+#        )
 
 #        plot_near_optimal_regions(
 #            df=df_hour,
