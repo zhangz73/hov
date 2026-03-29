@@ -29,12 +29,12 @@ from tqdm import tqdm
 ###############################################################################
 # Script Options
 ###############################################################################
-N_CPU = 1#30
-DENSITY_RECALIBRATE = True
-DENSITY_RETRAIN = True
+N_CPU = 30
+DENSITY_RECALIBRATE = False
+DENSITY_RETRAIN = False
 TRAIN_FRAC = 0.8
-USE_5_MIN = True
-FINE_TUNE = True
+USE_5_MIN = False
+FINE_TUNE = False
 
 ###############################################################################
 # Hyperparameters
@@ -49,14 +49,14 @@ WINDOW_SIZE = 1
 DELTA = 0.125
 num_grids = int(4 / DELTA)
 
-BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4), (4, 8)]
+BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT_FULL = {
     1: [(0, 0)],
     2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
     3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 }
 
-BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
+BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
 GAMMA_RANGE_DCT_AM = {
     1: [(0, 0)],
     2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)],
@@ -1732,6 +1732,10 @@ def get_flow_from_toll_iterative_mann(
     # 5) Mann iteration
     # ------------------------------------------------------------------
     for itr in tqdm(range(num_itr), leave=False):
+        if itr < 50:
+            lam = 1.0
+        else:
+            lam = 1e-2
         segment_type_strategy_v = (segment_type_strategy + itr * segment_type_strategy_prev) / (itr + 1)
         segment_type_strategy_prev = segment_type_strategy_v.copy()
 
@@ -2011,14 +2015,15 @@ def toll_design_fine_tune_single(
 ###############################################################################
 if DENSITY_RECALIBRATE:
     density = calibrate_density()
-#    if DENSITY_RETRAIN:
-#        np.save("density/preference_density_general_updated.npy", density)
+    if DENSITY_RETRAIN:
+        np.save("density/preference_density_general_updated.npy", density)
 else:
     density = np.load("density/preference_density_general_updated.npy")
 
-describe_density(density)
-assert False
+#describe_density(density)
+#assert False
 
+"""
 hour_idx = 7
 segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative(density, tau_cs = np.array([[1, 0.25, 0], [2, 0.5, 0], [2.5, 0.625, 0], [4.0, 1, 0], [5, 1.25, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 5000, lam = 1e-3)
 #segment_type_strategy, loss_arr, latency_o, latency_h, utility_cost_arr, total_travel_time, total_emission, total_revenue, total_utility_cost, flow_o_equi, flow_h_equi  = get_flow_from_toll_iterative_mann(density, tau_cs = np.array([[0.5, 0.125, 0], [1.5, 0.375, 0], [1, 0.25, 0], [1.5, 0.375, 0], [0.5, 0.125, 0]]).T, rho = 0.25, hour_idx = hour_idx, num_itr = 500, lam = 1e-2)
@@ -2038,20 +2043,21 @@ plt.clf()
 plt.close()
 
 assert False
+"""
 
-fname = "toll_design_multiseg_hour=16.csv"
-rho_lst = [0.25, 0.50, 0.75]
+fname = "toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg_hour=16.csv"
+rho_lst = [0.25, 0.50] #[0.25, 0.50, 0.75]
 
 if not FINE_TUNE:
     df_all = None
-    for hour_idx in tqdm([9]):#tqdm(range(12)):
+    for hour_idx in [9, 10]: #tqdm(range(12)):
         df_res = toll_design_grid_search(
             density,
             hour_idx=hour_idx,
             tau_max=5,
             d_tau=0.5,
             rho_lst=rho_lst,#[0.25],
-            num_itr=200,
+            num_itr=250,
             lam=1
         )
         df_res["Hour"] = hour_idx + 7
