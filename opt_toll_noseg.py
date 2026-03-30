@@ -29,11 +29,11 @@ from tqdm import tqdm
 ###############################################################################
 # Script Options
 ###############################################################################
-N_CPU = 30
-DENSITY_RECALIBRATE = False
-DENSITY_RETRAIN = False
+N_CPU = 1 #30
+DENSITY_RECALIBRATE = True
+DENSITY_RETRAIN = True
 TRAIN_FRAC = 0.8
-USE_5_MIN = False
+USE_5_MIN = True
 FINE_TUNE = False
 
 ###############################################################################
@@ -49,11 +49,11 @@ WINDOW_SIZE = 1
 DELTA = 0.125
 num_grids = int(4 / DELTA)
 
-BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
+BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)]
 GAMMA_RANGE_DCT_FULL = {
     1: [(0, 0)],
-    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
+    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)],
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 3), (3, 4)]
 }
 
 BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
@@ -1177,7 +1177,7 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     obj_ordinary = ((ordinary_pred - ordinary_tgt) * (ordinary_pred - ordinary_tgt)).sum() / max(TRAIN_IDX, 1)
     obj_hot = ((hot_pred - hot_tgt) * (hot_pred - hot_tgt)).sum() / max(TRAIN_IDX, 1)
 
-    objective = obj_ordinary + obj_hot * 9.0
+    objective = obj_ordinary + obj_hot * 16 #9.0
     objective = objective * 12 #144
 
     # HOT-lane occupancy ratio fitting
@@ -2020,8 +2020,8 @@ if DENSITY_RECALIBRATE:
 else:
     density = np.load("density/preference_density_general_updated.npy")
 
-#describe_density(density)
-#assert False
+describe_density(density)
+assert False
 
 """
 hour_idx = 7

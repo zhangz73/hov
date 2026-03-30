@@ -6,7 +6,7 @@ import matplotlib.ticker as mtick
 import matplotlib.dates as mdates
 
 os.makedirs("DynamicDesign/MultiSeg/Improvements", exist_ok=True)
-
+PLOT_IMPROVEMENT = False
 
 TOLL_COLS = [f"Toll {i}" for i in range(5)]
 
@@ -14,6 +14,7 @@ SEGMENT_LST = ['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', 
 df_design = pd.read_csv("./toll_design_multiseg.csv")
 df_design = df_design[df_design["Rho"] == 0.25]
 df_design = df_design[(df_design["Toll 0"] > 0) & (df_design["Toll 1"] > 0) & (df_design["Toll 2"] > 0) & (df_design["Toll 3"] > 0) & (df_design["Toll 4"] > 0)]
+df_design = df_design[df_design["Loss"] <= 1e-4]
 ## Date, Hour, Segment, Avg_total_toll
 df_toll = pd.read_csv("data/df_toll.csv")
 N_HOURS = 12
@@ -24,30 +25,31 @@ df_design["Total Travel Time"] /= N_POP
 df_design["Total Emission"] /= N_POP
 df_design["Total Utility Cost"] /= N_POP
 
-#toll_cols = [f"Toll {i}" for i in range(3)]
-#mask = (df_design["Hour"] <= 13) & (df_design[toll_cols].ge(1.5).any(axis=1))
-#df_design = df_design.loc[~mask].reset_index(drop=True)
-#toll_cols = [f"Toll {i}" for i in range(5)]
-#mask = (df_design["Hour"] <= 13) & (df_design[toll_cols].ge(2.5).any(axis=1))
-#df_design = df_design.loc[~mask].reset_index(drop=True)
-#
-#TOLL_LAM = 0.001
-#df_design_lst = []
-#for hour_idx in range(N_HOURS):
-#    hour = 7 + hour_idx
-#    toll_deviate = 0
-#    df_design_curr = df_design[df_design["Hour"] == hour].copy()
-#    for i in range(len(SEGMENT_LST)):
-#        segment = SEGMENT_LST[i]
-#        df_toll_curr = df_toll[(df_toll["Hour"] == hour) & (df_toll["Segment"] == segment)]
-#        toll_avg = df_toll_curr["Avg_total_toll"].mean()
-#        toll_deviate += (toll_avg - df_design_curr[f"Toll {i}"]).abs()
-#    df_design_curr["Total Travel Time"] += toll_deviate * df_design_curr["Total Travel Time"].mean() * TOLL_LAM
-#    df_design_curr["Total Emission"] += toll_deviate * df_design_curr["Total Emission"].mean() * TOLL_LAM
-#    df_design_curr["Total Utility Cost"] += toll_deviate * df_design_curr["Total Utility Cost"].mean() * TOLL_LAM
-#    df_design_curr["Total Revenue"] -= toll_deviate * df_design_curr["Total Revenue"].mean() * TOLL_LAM
-#    df_design_lst.append(df_design_curr)
-#df_design = pd.concat(df_design_lst, ignore_index = True)
+toll_cols = [f"Toll {i}" for i in range(3)]
+mask = (df_design["Hour"] <= 13) & (df_design[toll_cols].ge(1.5).any(axis=1))
+df_design = df_design.loc[~mask].reset_index(drop=True)
+toll_cols = [f"Toll {i}" for i in range(5)]
+mask = (df_design["Hour"] <= 13) & (df_design[toll_cols].ge(2.5).any(axis=1))
+df_design = df_design.loc[~mask].reset_index(drop=True)
+
+if not PLOT_IMPROVEMENT:
+    TOLL_LAM = 2e-1
+    df_design_lst = []
+    for hour_idx in range(N_HOURS):
+        hour = 7 + hour_idx
+        toll_deviate = 0
+        df_design_curr = df_design[df_design["Hour"] == hour].copy()
+        for i in range(len(SEGMENT_LST)):
+            segment = SEGMENT_LST[i]
+            df_toll_curr = df_toll[(df_toll["Hour"] == hour) & (df_toll["Segment"] == segment)]
+            toll_avg = df_toll_curr["Avg_total_toll"].mean()
+            toll_deviate += (toll_avg - df_design_curr[f"Toll {i}"]).abs()
+        df_design_curr["Total Travel Time"] += toll_deviate * df_design_curr["Total Travel Time"].std() * TOLL_LAM
+        df_design_curr["Total Emission"] += toll_deviate * df_design_curr["Total Emission"].std() * TOLL_LAM
+        df_design_curr["Total Utility Cost"] += toll_deviate * df_design_curr["Total Utility Cost"].std() * TOLL_LAM
+        df_design_curr["Total Revenue"] -= toll_deviate * df_design_curr["Total Revenue"].std() * TOLL_LAM
+        df_design_lst.append(df_design_curr)
+    df_design = pd.concat(df_design_lst, ignore_index = True)
 
 def plot_hourly_price(hour_lst, toll_design_lst, toll_avg_lst, toll_upper_lst, toll_lower_lst, goal, segment):
     if goal is not None:
@@ -314,87 +316,88 @@ for segment_idx, segment in enumerate(SEGMENT_LST):
 # =========================================================
 # Improvement plots: these are now common, so plot once
 # =========================================================
+if PLOT_IMPROVEMENT:
 
-plot_improvement(
-    common_hour_lst,
-    congestion_improvement_pct_lst,
-    congestion_improvement_value_lst,
-    "Min Congestion",
-    "total",
-)
-plot_improvement(
-    common_hour_lst,
-    emission_improvement_pct_lst,
-    emission_improvement_value_lst,
-    "Min Emission",
-    "total",
-)
-plot_improvement(
-    common_hour_lst,
-    revenue_improvement_pct_lst,
-    revenue_improvement_value_lst,
-    "Max Revenue",
-    "total",
-)
-plot_improvement(
-    common_hour_lst,
-    utility_cost_improvement_pct_lst,
-    utility_cost_improvement_value_lst,
-    "Min Utility Cost",
-    "total",
-)
+    plot_improvement(
+        common_hour_lst,
+        congestion_improvement_pct_lst,
+        congestion_improvement_value_lst,
+        "Min Congestion",
+        "total",
+    )
+    plot_improvement(
+        common_hour_lst,
+        emission_improvement_pct_lst,
+        emission_improvement_value_lst,
+        "Min Emission",
+        "total",
+    )
+    plot_improvement(
+        common_hour_lst,
+        revenue_improvement_pct_lst,
+        revenue_improvement_value_lst,
+        "Max Revenue",
+        "total",
+    )
+    plot_improvement(
+        common_hour_lst,
+        utility_cost_improvement_pct_lst,
+        utility_cost_improvement_value_lst,
+        "Min Utility Cost",
+        "total",
+    )
 
 
-# =========================================================
-# Total improvements
-# =========================================================
+    # =========================================================
+    # Total improvements
+    # =========================================================
 
-total_congestion_improvement_value_lst = value_dct["congestion_current"] - value_dct["congestion_best"]
-total_congestion_improvement_pct_lst = (
-    (value_dct["congestion_current"] - value_dct["congestion_best"]) / value_dct["congestion_current"] * 100
-)
+    total_congestion_improvement_value_lst = value_dct["congestion_current"] - value_dct["congestion_best"]
+    total_congestion_improvement_pct_lst = (
+        (value_dct["congestion_current"] - value_dct["congestion_best"]) / value_dct["congestion_current"] * 100
+    )
 
-total_emission_improvement_value_lst = value_dct["emission_current"] - value_dct["emission_best"]
-total_emission_improvement_pct_lst = (
-    (value_dct["emission_current"] - value_dct["emission_best"]) / value_dct["emission_current"] * 100
-)
+    total_emission_improvement_value_lst = value_dct["emission_current"] - value_dct["emission_best"]
+    total_emission_improvement_pct_lst = (
+        (value_dct["emission_current"] - value_dct["emission_best"]) / value_dct["emission_current"] * 100
+    )
 
-total_revenue_improvement_value_lst = value_dct["revenue_best"] - value_dct["revenue_current"]
-total_revenue_improvement_pct_lst = (
-    (value_dct["revenue_best"] - value_dct["revenue_current"]) / value_dct["revenue_current"] * 100
-)
+    total_revenue_improvement_value_lst = value_dct["revenue_best"] - value_dct["revenue_current"]
+    total_revenue_improvement_pct_lst = (
+        (value_dct["revenue_best"] - value_dct["revenue_current"]) / value_dct["revenue_current"] * 100
+    )
 
-total_utility_cost_improvement_value_lst = value_dct["utility_cost_current"] - value_dct["utility_cost_best"]
-total_utility_cost_improvement_pct_lst = (
-    (value_dct["utility_cost_current"] - value_dct["utility_cost_best"]) / value_dct["utility_cost_current"] * 100
-)
+    total_utility_cost_improvement_value_lst = value_dct["utility_cost_current"] - value_dct["utility_cost_best"]
+    total_utility_cost_improvement_pct_lst = (
+        (value_dct["utility_cost_current"] - value_dct["utility_cost_best"]) / value_dct["utility_cost_current"] * 100
+    )
 
-# These should now match the earlier improvement lists
-plot_improvement(
-    common_hour_lst,
-    total_congestion_improvement_pct_lst,
-    total_congestion_improvement_value_lst,
-    "Min Congestion",
-    "total_check",
-)
-plot_improvement(
-    common_hour_lst,
-    total_emission_improvement_pct_lst,
-    total_emission_improvement_value_lst,
-    "Min Emission",
-    "total_check",
-)
-plot_improvement(
-    common_hour_lst,
-    total_revenue_improvement_pct_lst,
-    total_revenue_improvement_value_lst,
-    "Max Revenue",
-    "total_check",
-)
-plot_improvement(
-    common_hour_lst,
-    total_utility_cost_improvement_pct_lst,
-    total_utility_cost_improvement_value_lst,
-    "Min Utility Cost",
-    "total_check",
-)
+    # These should now match the earlier improvement lists
+    plot_improvement(
+        common_hour_lst,
+        total_congestion_improvement_pct_lst,
+        total_congestion_improvement_value_lst,
+        "Min Congestion",
+        "total_check",
+    )
+    plot_improvement(
+        common_hour_lst,
+        total_emission_improvement_pct_lst,
+        total_emission_improvement_value_lst,
+        "Min Emission",
+        "total_check",
+    )
+    plot_improvement(
+        common_hour_lst,
+        total_revenue_improvement_pct_lst,
+        total_revenue_improvement_value_lst,
+        "Max Revenue",
+        "total_check",
+    )
+    plot_improvement(
+        common_hour_lst,
+        total_utility_cost_improvement_pct_lst,
+        total_utility_cost_improvement_value_lst,
+        "Min Utility Cost",
+        "total_check",
+    )
