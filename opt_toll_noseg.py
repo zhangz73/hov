@@ -1180,10 +1180,10 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     obj_ordinary = ((ordinary_pred - ordinary_tgt)/ordinary_denom  * (ordinary_pred - ordinary_tgt)/ordinary_denom).sum() / max(TRAIN_IDX, 1)
     obj_hot = ((hot_pred - hot_tgt)/hot_denom * (hot_pred - hot_tgt)/hot_denom).sum() / max(TRAIN_IDX, 1)
 
-    objective = obj_ordinary + obj_hot * 49.0 #49 #9.0
+    objective = obj_ordinary + obj_hot * 9.0 #49 #9.0
     #objective = obj_ordinary + obj_hot * 9
     #objective = objective * 1e5
-    #objective = objective * 12 #144
+    objective = objective * 12 #144
 
     # HOT-lane occupancy ratio fitting
     flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
