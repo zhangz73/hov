@@ -20,7 +20,7 @@ TOLL_LAM = 0.001
 #df["Total Utility Cost"] += toll_deviate * df["Total Utility Cost"].mean() * TOLL_LAM
 #df["Total Revenue"] -= toll_deviate * df["Total Revenue"].mean() * TOLL_LAM
 
-df_demand = pd.read_csv("Data/od_demand.csv")
+df_demand = pd.read_csv("data/od_demand.csv")
 N_POP = df_demand[df_demand["Hour"] == 16]["Demand"].sum() #1 #24546
 df["Total Travel Time"] /= N_POP
 df["Total Emission"] /= N_POP

@@ -29,11 +29,11 @@ from tqdm import tqdm
 ###############################################################################
 # Script Options
 ###############################################################################
-N_CPU = 30
-DENSITY_RECALIBRATE = False
-DENSITY_RETRAIN = False
+N_CPU = 1#30
+DENSITY_RECALIBRATE = True#False
+DENSITY_RETRAIN = True#False
 TRAIN_FRAC = 0.8
-USE_5_MIN = False
+USE_5_MIN = True#False
 FINE_TUNE = False
 
 ###############################################################################
@@ -1174,10 +1174,15 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     hot_pred = f_equi[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)]
     hot_tgt = flow_target[(N_DATA * S):(N_DATA * S + TRAIN_IDX * S)]
 
-    obj_ordinary = ((ordinary_pred - ordinary_tgt) * (ordinary_pred - ordinary_tgt)).sum() / max(TRAIN_IDX, 1)
-    obj_hot = ((hot_pred - hot_tgt) * (hot_pred - hot_tgt)).sum() / max(TRAIN_IDX, 1)
+    ordinary_denom = 1 #np.maximum(ordinary_tgt, 1)
+    hot_denom = 1 #np.maximum(hot_tgt, 1)
+
+    obj_ordinary = ((ordinary_pred - ordinary_tgt)/ordinary_denom  * (ordinary_pred - ordinary_tgt)/ordinary_denom).sum() / max(TRAIN_IDX, 1)
+    obj_hot = ((hot_pred - hot_tgt)/hot_denom * (hot_pred - hot_tgt)/hot_denom).sum() / max(TRAIN_IDX, 1)
 
     objective = obj_ordinary + obj_hot * 49 #9.0
+    #objective = obj_ordinary + obj_hot * 9
+    #objective = objective * 1e5
 #    objective = objective * 12 #144
 
     # HOT-lane occupancy ratio fitting
@@ -2020,8 +2025,8 @@ if DENSITY_RECALIBRATE:
 else:
     density = np.load("density/preference_density_general_updated.npy")
 
-#describe_density(density)
-#assert False
+describe_density(density)
+assert False
 
 """
 hour_idx = 7
@@ -2045,12 +2050,12 @@ plt.close()
 assert False
 """
 
-fname = "toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg.csv"
-rho_lst = [0.25, 0.50] #[0.25, 0.50, 0.75]
+fname = "toll_design_multiseg.csv" #"toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg.csv"
+rho_lst = [0.25] #[0.25, 0.50] #[0.25, 0.50, 0.75]
 
 if not FINE_TUNE:
     df_all = None
-    for hour_idx in [9, 10]: #tqdm(range(12)):
+    for hour_idx in tqdm(range(12)): #[9, 10]: #tqdm(range(12)):
         df_res = toll_design_grid_search(
             density,
             hour_idx=hour_idx,
