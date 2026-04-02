@@ -46,7 +46,7 @@ BPR_B = 0.7906
 DISTANCE = 7.16
 WINDOW_SIZE = 1
 
-OD_LAM = 0.2
+OD_LAM = 0.4
 
 DELTA = 0.125
 num_grids = int(4 / DELTA)
@@ -1189,7 +1189,7 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     obj_ordinary = ((ordinary_pred - ordinary_tgt)/ordinary_denom  * (ordinary_pred - ordinary_tgt)/ordinary_denom).sum() / max(TRAIN_IDX, 1)
     obj_hot = ((hot_pred - hot_tgt)/hot_denom * (hot_pred - hot_tgt)/hot_denom).sum() / max(TRAIN_IDX, 1)
 
-    objective = obj_ordinary + obj_hot * 25.0 #49 #9.0
+    objective = obj_ordinary + obj_hot * 49 #9.0
     #objective = obj_ordinary + obj_hot * 9
     #objective = objective * 1e5
     #objective = objective * 12 #144
