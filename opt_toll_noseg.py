@@ -46,6 +46,8 @@ BPR_B = 0.7906
 DISTANCE = 7.16
 WINDOW_SIZE = 1
 
+OD_LAM = 0.2
+
 DELTA = 0.125
 num_grids = int(4 / DELTA)
 
@@ -164,6 +166,7 @@ FLOW_COEF[len(FLOW_O_LST):] = 3
 segment_type_num = int(S * (S + 1) / 2)
 HOUR_OD_DEMAND = np.zeros(N_HOUR * segment_type_num)
 df_od_demand = pd.read_csv("data/od_demand.csv")
+df_od_demand_ub = pd.read_csv("data/od_demand_ub.csv")
 for hour_idx in range(N_HOUR):
     hour = HOUR_LST[hour_idx]
     segment_idx = 0
@@ -171,11 +174,17 @@ for hour_idx in range(N_HOUR):
         origin_seg = segment_lst[s_o]
         for s_d in range(s_o, S):
             dest_seg = segment_lst[s_d]
-            HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] = df_od_demand[
+            od_demand_lb = df_od_demand[
                 (df_od_demand["Hour"] == hour)
                 & (df_od_demand["Origin"] == origin_seg)
                 & (df_od_demand["Destination"] == dest_seg)
             ].iloc[0]["Demand"]
+            od_demand_ub = df_od_demand_ub[
+                (df_od_demand_ub["Hour"] == hour)
+                & (df_od_demand_ub["Origin"] == origin_seg)
+                & (df_od_demand_ub["Destination"] == dest_seg)
+            ].iloc[0]["Demand"]
+            HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] = od_demand_lb * (1 - OD_LAM) + od_demand_ub * OD_LAM
             if USE_5_MIN:
                 HOUR_OD_DEMAND[hour_idx * segment_type_num + segment_idx] /= 12
             segment_idx += 1
