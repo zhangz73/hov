@@ -72,7 +72,7 @@ df_pop = pd.read_csv("pop_fraction.csv", thousands = ",")
 df_pop["Date"] = pd.to_datetime(df_pop["Date"]).dt.strftime("%Y-%m-%d")
 df_pems = df_pems.merge(df_pop, on = "Date")
 df_pems["Total"] = df_pems["Single"] + df_pems["TwoPeople"] + df_pems["ThreePlus"]
-df_pems["Total Flow"] = df_pems["Ordinary Flow"] + df_pems["HOT Flow"] * (1 * df_pems["Single"] / df_pems["Total"] + 2 * df_pems["TwoPeople"] / df_pems["Total"] + 3 * df_pems["ThreePlus"] / df_pems["Total"])
+df_pems["Total Flow"] = (df_pems["Ordinary Flow"] + df_pems["HOT Flow"]) * (1 * df_pems["Single"] / df_pems["Total"] + 2 * df_pems["TwoPeople"] / df_pems["Total"] + 3 * df_pems["ThreePlus"] / df_pems["Total"])
 
 ### Compute in-flow and out-flow
 df_pems = df_pems[["Hour", "Segment", "LaneType", "Total Flow"]].groupby(["Hour", "Segment", "LaneType"]).mean().reset_index()
@@ -267,7 +267,7 @@ def max_entropy_analytical():
 def bertsimas_n_yan():
     pass
 
-total_demand = max_entropy_gurobi(penalty_weight=5.0, min_flow=1e-6) #
+total_demand = max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6) #
 hour_lst_ret = []
 origin_lst_ret = []
 dest_lst_ret = []
