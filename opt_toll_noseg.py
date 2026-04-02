@@ -52,15 +52,15 @@ num_grids = int(4 / DELTA)
 BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT_FULL = {
     1: [(0, 0)],
-    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
+    2: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
+    3: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 }
 
 BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
 GAMMA_RANGE_DCT_AM = {
     1: [(0, 0)],
-    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)],
-    3: [(0, 0.25), (0.25, 0.5), (0.5, 1)]
+    2: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)],
+    3: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1)]
 }
 
 BETA_RANGE_LST = BETA_RANGE_LST_FULL
@@ -1180,10 +1180,10 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     obj_ordinary = ((ordinary_pred - ordinary_tgt)/ordinary_denom  * (ordinary_pred - ordinary_tgt)/ordinary_denom).sum() / max(TRAIN_IDX, 1)
     obj_hot = ((hot_pred - hot_tgt)/hot_denom * (hot_pred - hot_tgt)/hot_denom).sum() / max(TRAIN_IDX, 1)
 
-    objective = obj_ordinary + obj_hot * 49 #9.0
+    objective = obj_ordinary + obj_hot * 9.0 #49 #9.0
     #objective = obj_ordinary + obj_hot * 9
     #objective = objective * 1e5
-#    objective = objective * 12 #144
+    objective = objective * 12 #144
 
     # HOT-lane occupancy ratio fitting
     flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
@@ -2050,12 +2050,12 @@ plt.close()
 assert False
 """
 
-fname = "toll_design_multiseg.csv" #"toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg.csv"
-rho_lst = [0.25] #[0.25, 0.50] #[0.25, 0.50, 0.75]
+fname = "toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg.csv"
+rho_lst = [0.25, 0.50] #[0.25, 0.50, 0.75]
 
 if not FINE_TUNE:
     df_all = None
-    for hour_idx in tqdm(range(12)): #[9, 10]: #tqdm(range(12)):
+    for hour_idx in [9, 10]: #tqdm(range(12)):
         df_res = toll_design_grid_search(
             density,
             hour_idx=hour_idx,
