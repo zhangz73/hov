@@ -7,7 +7,7 @@ import gurobipy as gp
 from gurobipy import GRB
 from tqdm import tqdm
 
-RELOAD_DATA = True
+RELOAD_DATA = False
 
 #RELEVANT_STATIONS = [400488, 401561, 400611, 400928, 400284, 400041, 408133, 408135, 417665, 412637, 417666, 408134, 400685, 401003, 400898, 400275, 400939, 400180, 400529, 400990, 400515, 400252]
 # RELEVANT_STATIONS = [400488, 400611, 400284, 400041, 412637, 417666, 400275, 400990, 400515, 400252]
@@ -64,7 +64,7 @@ if RELOAD_DATA:
 df_pems = pd.read_csv("data/df_PeMs_laneTypes.csv")
 print(df_pems)
 
-df_meta = pd.read_csv("Data/df_meta.csv")
+df_meta = pd.read_csv("data/df_meta.csv")
 df_pems = df_pems.merge(df_meta[["Date", "Hour", "Avg_total_toll"]], on = ["Date", "Hour"])
 df_pems = df_pems.dropna()
 
@@ -267,7 +267,7 @@ def max_entropy_analytical():
 def bertsimas_n_yan():
     pass
 
-total_demand = max_entropy_gurobi(penalty_weight=10.0, min_flow=1e-6) #
+total_demand = max_entropy_gurobi(penalty_weight=5.0, min_flow=1e-6) #
 hour_lst_ret = []
 origin_lst_ret = []
 dest_lst_ret = []

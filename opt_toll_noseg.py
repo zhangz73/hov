@@ -49,11 +49,11 @@ WINDOW_SIZE = 1
 DELTA = 0.125
 num_grids = int(4 / DELTA)
 
-BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4), (4, 8)]
+BETA_RANGE_LST_FULL = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 GAMMA_RANGE_DCT_FULL = {
     1: [(0, 0)],
-    2: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
-    3: [(0, 0.125), (0.125, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
+    2: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)],
+    3: [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2), (2, 4)]
 }
 
 BETA_RANGE_LST_AM = [(0, 0.25), (0.25, 0.5), (0.5, 1), (1, 2)]
@@ -1183,7 +1183,7 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     objective = obj_ordinary + obj_hot * 49.0 #49 #9.0
     #objective = obj_ordinary + obj_hot * 9
     #objective = objective * 1e5
-    objective = objective * 12 #144
+    #objective = objective * 12 #144
 
     # HOT-lane occupancy ratio fitting
     flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
