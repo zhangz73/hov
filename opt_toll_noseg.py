@@ -29,11 +29,11 @@ from tqdm import tqdm
 ###############################################################################
 # Script Options
 ###############################################################################
-N_CPU = 1#30
-DENSITY_RECALIBRATE = True#False
-DENSITY_RETRAIN = True#False
+N_CPU = 30
+DENSITY_RECALIBRATE = False
+DENSITY_RETRAIN = False
 TRAIN_FRAC = 0.8
-USE_5_MIN = True#False
+USE_5_MIN = False
 FINE_TUNE = False
 
 ###############################################################################
@@ -1192,7 +1192,7 @@ def optimize_density(d_len, d_to_f_mat, d_to_fh_mat, d_to_fh_total_mat, single_t
     objective = obj_ordinary + obj_hot * 9.0 #9.0
     #objective = obj_ordinary + obj_hot * 9
     #objective = objective * 1e5
-    objective = objective * 144 #12 #144
+    objective = objective * 12 #12 #144
 
     # HOT-lane occupancy ratio fitting
     flow_ratio_target_total = PROFILE_DATE_MAP @ f_h_total_equi
@@ -2034,8 +2034,8 @@ if DENSITY_RECALIBRATE:
 else:
     density = np.load("density/preference_density_general_updated.npy")
 
-describe_density(density)
-assert False
+#describe_density(density)
+#assert False
 
 """
 hour_idx = 7
@@ -2059,12 +2059,20 @@ plt.close()
 assert False
 """
 
-fname = "toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg.csv"
-rho_lst = [0.25, 0.50] #[0.25, 0.50, 0.75]
+FULL_HOURS = False
+
+if FULL_HOURS:
+    fname = "toll_design_multiseg.csv" #"toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg.csv"
+    rho_lst = [0.25] #[0.25, 0.50] #[0.25, 0.50, 0.75]
+    hour_lst = list(range(12))
+else:
+    fname = "toll_design_multiseg_hour=16-17.csv"
+    rho_lst = [0.25, 0.50]
+    hour_lst = [9, 10]
 
 if not FINE_TUNE:
     df_all = None
-    for hour_idx in [9, 10]: #tqdm(range(12)):
+    for hour_idx in tqdm(hour_lst): #[9, 10]: #tqdm(range(12)):
         df_res = toll_design_grid_search(
             density,
             hour_idx=hour_idx,
