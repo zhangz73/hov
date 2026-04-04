@@ -6,7 +6,7 @@ import matplotlib.ticker as mtick
 import matplotlib.dates as mdates
 
 os.makedirs("DynamicDesign/MultiSeg/Improvements", exist_ok=True)
-PLOT_IMPROVEMENT = False
+PLOT_IMPROVEMENT = True
 
 TOLL_COLS = [f"Toll {i}" for i in range(5)]
 
@@ -14,7 +14,7 @@ SEGMENT_LST = ['3420 - Auto Mall NB', '3430 - Mowry NB', '3440 - Decoto/84 NB', 
 df_design = pd.read_csv("./toll_design_multiseg.csv")
 df_design = df_design[df_design["Rho"] == 0.25]
 df_design = df_design[(df_design["Toll 0"] > 0) & (df_design["Toll 1"] > 0) & (df_design["Toll 2"] > 0) & (df_design["Toll 3"] > 0) & (df_design["Toll 4"] > 0)]
-df_design = df_design[df_design["Loss"] <= 1e-4]
+#df_design = df_design[df_design["Loss"] <= 1e-4]
 ## Date, Hour, Segment, Avg_total_toll
 df_toll = pd.read_csv("data/df_toll.csv")
 N_HOURS = 12
@@ -252,65 +252,65 @@ for hour_idx in range(N_HOURS):
 # Segment-specific price plots
 # =========================================================
 # Assumes plot_hourly_price(...) already exists in your codebase.
+if not PLOT_IMPROVEMENT:
+    for segment_idx, segment in enumerate(SEGMENT_LST):
+        segment_short = segment.split("-")[1].split("/")[0].strip()
 
-for segment_idx, segment in enumerate(SEGMENT_LST):
-    segment_short = segment.split("-")[1].split("/")[0].strip()
+        toll_avg_lst = common_toll_avg_by_segment[segment]
 
-    toll_avg_lst = common_toll_avg_by_segment[segment]
+        # If you still want uncertainty bands from raw toll data, compute them here
+        toll_upper_lst = []
+        toll_lower_lst = []
+        for hour in common_hour_lst:
+            df_toll_curr = df_toll[(df_toll["Hour"] == hour) & (df_toll["Segment"] == segment)]
+            toll_upper_lst.append(df_toll_curr["Avg_total_toll"].quantile(0.975))
+            toll_lower_lst.append(df_toll_curr["Avg_total_toll"].quantile(0.025))
 
-    # If you still want uncertainty bands from raw toll data, compute them here
-    toll_upper_lst = []
-    toll_lower_lst = []
-    for hour in common_hour_lst:
-        df_toll_curr = df_toll[(df_toll["Hour"] == hour) & (df_toll["Segment"] == segment)]
-        toll_upper_lst.append(df_toll_curr["Avg_total_toll"].quantile(0.975))
-        toll_lower_lst.append(df_toll_curr["Avg_total_toll"].quantile(0.025))
-
-    plot_hourly_price(
-        common_hour_lst,
-        min_congestion_toll_by_segment[segment],
-        toll_avg_lst,
-        toll_upper_lst,
-        toll_lower_lst,
-        "Min Congestion",
-        segment_short,
-    )
-    plot_hourly_price(
-        common_hour_lst,
-        min_emission_toll_by_segment[segment],
-        toll_avg_lst,
-        toll_upper_lst,
-        toll_lower_lst,
-        "Min Emission",
-        segment_short,
-    )
-    plot_hourly_price(
-        common_hour_lst,
-        max_revenue_toll_by_segment[segment],
-        toll_avg_lst,
-        toll_upper_lst,
-        toll_lower_lst,
-        "Max Revenue",
-        segment_short,
-    )
-    plot_hourly_price(
-        common_hour_lst,
-        min_utility_cost_toll_by_segment[segment],
-        toll_avg_lst,
-        toll_upper_lst,
-        toll_lower_lst,
-        "Min Utility Cost",
-        segment_short,
-    )
-    plot_hourly_price(
-        common_hour_lst,
-        None,
-        toll_avg_lst,
-        toll_upper_lst,
-        toll_lower_lst,
-        None,
-        segment_short,
-    )
+        plot_hourly_price(
+            common_hour_lst,
+            min_congestion_toll_by_segment[segment],
+            toll_avg_lst,
+            toll_upper_lst,
+            toll_lower_lst,
+            "Min Congestion",
+            segment_short,
+        )
+        plot_hourly_price(
+            common_hour_lst,
+            min_emission_toll_by_segment[segment],
+            toll_avg_lst,
+            toll_upper_lst,
+            toll_lower_lst,
+            "Min Emission",
+            segment_short,
+        )
+        plot_hourly_price(
+            common_hour_lst,
+            max_revenue_toll_by_segment[segment],
+            toll_avg_lst,
+            toll_upper_lst,
+            toll_lower_lst,
+            "Max Revenue",
+            segment_short,
+        )
+        plot_hourly_price(
+            common_hour_lst,
+            min_utility_cost_toll_by_segment[segment],
+            toll_avg_lst,
+            toll_upper_lst,
+            toll_lower_lst,
+            "Min Utility Cost",
+            segment_short,
+        )
+        plot_hourly_price(
+            common_hour_lst,
+            None,
+            toll_avg_lst,
+            toll_upper_lst,
+            toll_lower_lst,
+            None,
+            segment_short,
+        )
 
 
 # =========================================================
