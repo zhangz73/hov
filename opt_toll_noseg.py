@@ -1361,6 +1361,240 @@ def describe_density(density, meta_data=None):
                     print(f"\t\tBeta = {tup[0]}, Gamma = {tup[1:]}: {val}")
 
 
+def print_density_latex_table_long(
+    density,
+    meta_data=None,
+    precision=2,
+    threshold=1e-6,
+    hour_col_name="Hour",
+    beta_col_name=r"$\beta$ range",
+    gamma2_col_name=r"$\gamma_2$ range",
+    gamma3_col_name=r"$\gamma_3$ range",
+    density_col_name="Preference density"
+):
+    """
+    Print one LaTeX longtable with rows indexed by hour and preference region.
+
+    Columns:
+        Hour | beta range | gamma_2 range | gamma_3 range | preference density (%)
+
+    Parameters
+    ----------
+    density : array-like
+        Flattened density array with shape (N_HOUR * single_t_d_len,).
+    meta_data : dict, optional
+        If provided, updates the global metadata variables.
+    precision : int, default=2
+        Number of decimal places for displayed percentages.
+    threshold : float, default=1e-6
+        Entries with absolute value below this threshold are skipped.
+    *_col_name : str
+        Column names used in the LaTeX table header.
+    """
+    global N_HOUR, S, C, BETA_RANGE_LST, GAMMA_RANGE_DCT, HOUR_OD_DEMAND, UNIQUE_HOUR_LST
+
+    if meta_data is not None:
+        N_HOUR = meta_data["N_HOUR"]
+        S = meta_data["S"]
+        C = meta_data["C"]
+        BETA_RANGE_LST = meta_data["BETA_RANGE_LST"]
+        GAMMA_RANGE_DCT = meta_data["GAMMA_RANGE_DCT"]
+        HOUR_OD_DEMAND = meta_data["HOUR_OD_DEMAND"]
+        UNIQUE_HOUR_LST = meta_data["UNIQUE_HOUR_LST"]
+
+    _, _, d_idx_start_lst = get_grid(
+        beta_range_lst=BETA_RANGE_LST,
+        gamma_range_dct=GAMMA_RANGE_DCT
+    )
+    beta_gamma_range_lst = get_beta_gamma_range_lst(
+        beta_range_lst=BETA_RANGE_LST,
+        gamma_range_dct=GAMMA_RANGE_DCT
+    )
+
+    single_t_d_len = len(d_idx_start_lst) - 1
+
+    def _to_latex_interval(x):
+        """Convert a range-like object to a LaTeX-friendly string."""
+        if isinstance(x, str):
+            return x
+        if isinstance(x, (list, tuple)) and len(x) == 2:
+            return f"$[{x[0]}, {x[1]}]$"
+        return f"${x}$"
+
+    print("\\begin{longtable}{|c|cccc|}")
+    print("\\caption{Preference density distribution by hour and preference region (\\%).}\\\\")
+    print("\t\\hline")
+    print(
+        f"\t{hour_col_name} & {beta_col_name} & {gamma2_col_name} & {gamma3_col_name} & {density_col_name} (\\%) \\\\"
+    )
+    print("\t\\hline")
+    print("\\endfirsthead")
+
+    print("\t\\hline")
+    print(
+        f"\t{hour_col_name} & {beta_col_name} & {gamma2_col_name} & {gamma3_col_name} & {density_col_name} (\\%) \\\\"
+    )
+    print("\t\\hline")
+    print("\\endhead")
+
+    print("\t\\hline")
+    print("\\endfoot")
+
+    print("\t\\hline")
+    print("\\endlastfoot")
+
+    for hour_idx in range(N_HOUR):
+        hour_val = UNIQUE_HOUR_LST[hour_idx]
+
+        for d_idx in range(single_t_d_len):
+            val = density[hour_idx * single_t_d_len + d_idx]
+            if abs(val) <= threshold:
+                continue
+
+            tup = beta_gamma_range_lst[d_idx]
+
+            beta_range = _to_latex_interval(tup[0])
+
+            if C >= 2:
+                gamma2_range = _to_latex_interval(tup[2])
+            else:
+                gamma2_range = "--"
+
+            if C >= 3:
+                gamma3_range = _to_latex_interval(tup[3])
+            else:
+                gamma3_range = "--"
+
+            val_pct = 100.0 * val
+            val_str = f"{val_pct:.{precision}f}"
+
+            if hour_idx < N_HOUR - 1 or d_idx < single_t_d_len - 1:
+                print(
+                    f"\t{hour_val} & {beta_range} & {gamma2_range} & {gamma3_range} & {val_str} \\\\"
+                )
+            else:
+                print(
+                    f"\t{hour_val} & {beta_range} & {gamma2_range} & {gamma3_range} & {val_str}"
+                )
+        if hour_idx < N_HOUR - 1:
+            print("\t\\hline")
+
+    print("\\label{tab:preference-density}")
+    print("\\end{longtable}")
+
+def print_od_demand_bounds_longtable(
+    lb_path="data/od_demand.csv",
+    ub_path="data/od_demand_ub.csv",
+    precision=2,
+    hour_col="Hour",
+    origin_col="Origin",
+    destination_col="Destination",
+    demand_col="Demand"
+):
+    """
+    Read lower- and upper-bound OD demand files, merge them, and print
+    a LaTeX longtable.
+
+    Parameters
+    ----------
+    lb_path : str
+        Path to the lower-bound demand CSV.
+    ub_path : str
+        Path to the upper-bound demand CSV.
+    precision : int
+        Number of decimal places for demand values.
+    hour_col : str
+        Column name for hour.
+    origin_col : str
+        Column name for origin.
+    destination_col : str
+        Column name for destination.
+    demand_col : str
+        Column name for demand.
+    """
+    df_lb = pd.read_csv(lb_path)
+    df_ub = pd.read_csv(ub_path)
+
+    # Rename demand columns before merge
+    df_lb = df_lb.rename(columns={demand_col: "Demand_LB"})
+    df_ub = df_ub.rename(columns={demand_col: "Demand_UB"})
+
+    # Merge on Hour, Origin, Destination
+    df = df_lb.merge(
+        df_ub,
+        on=[hour_col, origin_col, destination_col],
+        how="inner"
+    )
+    
+    df["Demand_LB"], df["Demand_UB"] = (
+        df[["Demand_LB", "Demand_UB"]].min(axis=1),
+        df[["Demand_LB", "Demand_UB"]].max(axis=1),
+    )
+    
+    df = df[(df["Hour"] >= 7) & (df["Hour"] <= 18)]
+
+    # Sort for cleaner output
+    df = df.sort_values(by=[hour_col, origin_col, destination_col]).reset_index(drop=True)
+
+    def _fmt(x):
+        if pd.isna(x):
+            return "--"
+        if isinstance(x, (int, float)):
+            return f"{int(x)}" #f"{x:.{precision}f}"
+        return str(x)
+
+    print("\\begin{longtable}{|c|c|c|c|c|}")
+    print("\\caption{Origin--destination demand lower and upper bounds.}\\\\")
+    print("\t\\hline")
+    print("\tHour & Origin & Destination & Demand (LB) & Demand (UB) \\\\")
+    print("\t\\hline")
+    print("\\endfirsthead")
+
+    print("\t\\hline")
+    print("\tHour & Origin & Destination & Demand (LB) & Demand (UB) \\\\")
+    print("\t\\hline")
+    print("\\endhead")
+
+    print("\t\\hline")
+    print("\\endfoot")
+
+    print("\t\\hline")
+    print("\\endlastfoot")
+
+    prev_hour = None
+
+    for idx, row in df.iterrows():
+        current_hour = row[hour_col]
+        
+        if row["Demand_LB"] <= 1 or row["Demand_UB"] <= 1:
+            continue
+
+        # If we finished a previous hour block, print a separator
+        if prev_hour is not None and current_hour != prev_hour:
+            print("\t\\hline")
+
+        if idx < df.shape[0] - 1:
+            print(
+                f"\t{_fmt(row[hour_col])} & "
+                f"{_fmt(row[origin_col])} & "
+                f"{_fmt(row[destination_col])} & "
+                f"{_fmt(row['Demand_LB'])} & "
+                f"{_fmt(row['Demand_UB'])} \\\\"
+            )
+        else:
+            print(
+                f"\t{_fmt(row[hour_col])} & "
+                f"{_fmt(row[origin_col])} & "
+                f"{_fmt(row[destination_col])} & "
+                f"{_fmt(row['Demand_LB'])} & "
+                f"{_fmt(row['Demand_UB'])} "
+            )
+
+        prev_hour = current_hour
+
+    print("\\label{tab:od-demand-bounds}")
+    print("\\end{longtable}")
+
 def get_segment_pop(density, hour_idx):
     beta_lst, gamma_box_map, d_idx_start_lst = get_grid()
     single_t_d_len = len(d_idx_start_lst) - 1
@@ -2035,7 +2269,28 @@ else:
     density = np.load("density/preference_density_general_updated.npy")
 
 #describe_density(density)
-#assert False
+print_density_latex_table_long(
+    density,
+    meta_data=None,
+    precision=2,
+    threshold=1e-6,
+    hour_col_name="Hour",
+    beta_col_name=r"$\beta$ range",
+    gamma2_col_name=r"$\gamma_2$ range",
+    gamma3_col_name=r"$\gamma_3$ range",
+    density_col_name="Preference density"
+)
+
+print_od_demand_bounds_longtable(
+    lb_path="data/od_demand.csv",
+    ub_path="data/od_demand_ub.csv",
+    precision=2,
+    hour_col="Hour",
+    origin_col="Origin",
+    destination_col="Destination",
+    demand_col="Demand"
+)
+assert False
 
 """
 hour_idx = 7
