@@ -2059,7 +2059,7 @@ plt.close()
 assert False
 """
 
-FULL_HOURS = False
+FULL_HOURS = True
 
 if FULL_HOURS:
     fname = "toll_design_multiseg.csv" #"toll_design_multiseg_hour=16-17.csv" #"toll_design_multiseg.csv"
