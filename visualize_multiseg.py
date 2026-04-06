@@ -6,7 +6,7 @@ import matplotlib.ticker as mtick
 import matplotlib.dates as mdates
 
 os.makedirs("DynamicDesign/MultiSeg/Improvements", exist_ok=True)
-PLOT_IMPROVEMENT = True
+PLOT_IMPROVEMENT = False
 
 TOLL_COLS = [f"Toll {i}" for i in range(5)]
 

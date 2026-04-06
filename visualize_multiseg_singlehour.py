@@ -3,25 +3,29 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-df = pd.read_csv("toll_design_multiseg_hour=16_multi-rho.csv")
+df = pd.read_csv("toll_design_multiseg_hour=16-17.csv")
 df.columns = ["HOT Capacity" if x == "Rho" else x for x in df.columns]
 SEGMENT_NAMES = ["Auto Mall", "Mowry", "Decoto", "Whipple", "Hesperian"]
 TOLL_COLS = [f"Toll {i}" for i in range(5)]
 TOLL_VALS = [1.1, 2.2, 2.5, 4.0, 5.0]
-TOLL_LAM = 0.001
-#for toll_col in TOLL_COLS:
-#    df = df[df[toll_col] > 0]
+TOLL_LAM = 1e-2
+HOUR = 17
+df = df[df["Hour"] == HOUR]
+for toll_col in TOLL_COLS:
+    df = df[df[toll_col] > 0]
+#df = df[df["Loss"] <= 1e-4]
+print(df[(df["Total Revenue"] == 0) & (df["HOT Capacity"] == 0.5)].iloc[0])
 #toll_deviate = 0
 #for i in range(len(SEGMENT_NAMES)):
 #    toll_avg = TOLL_VALS[i]
 #    toll_deviate += (toll_avg - df[f"Toll {i}"]).abs()
-#df["Total Travel Time"] += toll_deviate * df["Total Travel Time"].mean() * TOLL_LAM
-#df["Total Emission"] += toll_deviate * df["Total Emission"].mean() * TOLL_LAM
-#df["Total Utility Cost"] += toll_deviate * df["Total Utility Cost"].mean() * TOLL_LAM
-#df["Total Revenue"] -= toll_deviate * df["Total Revenue"].mean() * TOLL_LAM
+#df["Total Travel Time"] += toll_deviate * df["Total Travel Time"].std() * TOLL_LAM
+#df["Total Emission"] += toll_deviate * df["Total Emission"].std() * TOLL_LAM
+#df["Total Utility Cost"] += toll_deviate * df["Total Utility Cost"].std() * TOLL_LAM
+#df["Total Revenue"] -= toll_deviate * df["Total Revenue"].std() * TOLL_LAM
 
 df_demand = pd.read_csv("data/od_demand.csv")
-N_POP = df_demand[df_demand["Hour"] == 16]["Demand"].sum() #1 #24546
+N_POP = df_demand[df_demand["Hour"] == HOUR]["Demand"].sum() #1 #24546
 df["Total Travel Time"] /= N_POP
 df["Total Emission"] /= N_POP
 df["Total Utility Cost"] /= N_POP
